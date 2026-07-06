@@ -1,5 +1,5 @@
 const { encryptText, decryptText, stableContentHash } = require('./cryptoService');
-const { createMemoryExtraction } = require('./openaiTextService');
+const { createMemoryExtraction } = require('./memoryExtractionService');
 
 function clampImportance(value) {
   const number = Number(value || 3);
@@ -164,7 +164,10 @@ async function extractAndSaveMemories(models, {
       importance: item.importance || 3,
       isSensitive: item.sensitive || item.category === 'sensitive' || item.category === 'safety',
       sourceSessionId: sessionId,
-      metadata: { extractor: process.env.MEMORY_EXTRACT_MODEL || 'gpt-5.4-nano' },
+      metadata: {
+        extractorProvider: process.env.MEMORY_EXTRACT_PROVIDER || (process.env.OPENAI_API_KEY ? 'openai' : 'gemini'),
+        extractor: process.env.MEMORY_EXTRACT_MODEL || process.env.GEMINI_MEMORY_MODEL || 'gpt-5.4-nano',
+      },
     }));
   }
 

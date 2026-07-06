@@ -1,9 +1,18 @@
 const state = {
   pc: null,
   dc: null,
+  ws: null,
   localStream: null,
+  audioContext: null,
+  micSource: null,
+  processor: null,
+  playbackTime: 0,
+  playbackSources: [],
   sessionId: null,
+  provider: null,
   sentTurns: new Set(),
+  geminiUserTranscript: '',
+  geminiAssistantTranscript: '',
 };
 
 const els = {
@@ -56,6 +65,51 @@ function escapeHtml(value) {
     .replaceAll("'", '&#039;');
 }
 
+function arrayBufferToBase64(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+function base64ToArrayBuffer(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+function downsampleBuffer(input, inputRate, outputRate) {
+  if (inputRate === outputRate) return input;
+  const ratio = inputRate / outputRate;
+  const length = Math.round(input.length / ratio);
+  const output = new Float32Array(length);
+
+  for (let i = 0; i < length; i += 1) {
+    const start = Math.floor(i * ratio);
+    const end = Math.min(Math.floor((i + 1) * ratio), input.length);
+    let total = 0;
+    for (let j = start; j < end; j += 1) total += input[j];
+    output[i] = total / Math.max(1, end - start);
+  }
+
+  return output;
+}
+
+function float32ToPcm16(float32) {
+  const pcm = new Int16Array(float32.length);
+  for (let i = 0; i < float32.length; i += 1) {
+    const sample = Math.max(-1, Math.min(1, float32[i]));
+    pcm[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+  }
+  return pcm.buffer;
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
     headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
@@ -70,6 +124,14 @@ async function api(path, options = {}) {
   }
 
   return data;
+}
+
+async function loadHealth() {
+  const data = await api('/api/health');
+  if (data.realtimeProvider && els.provider.querySelector(`option[value="${data.realtimeProvider}"]`)) {
+    els.provider.value = data.realtimeProvider;
+    els.providerStatus.textContent = data.realtimeProvider;
+  }
 }
 
 function getUserId() {
@@ -170,13 +232,184 @@ async function handleRealtimeEvent(event) {
   }
 }
 
-async function startVoice() {
+function setupGeminiMicCapture() {
+  const sampleRate = state.audioContext.sampleRate;
+  state.micSource = state.audioContext.createMediaStreamSource(state.localStream);
+  state.processor = state.audioContext.createScriptProcessor(4096, 1, 1);
+
+  state.processor.onaudioprocess = (event) => {
+    const output = event.outputBuffer.getChannelData(0);
+    output.fill(0);
+
+    if (!state.ws || state.ws.readyState !== WebSocket.OPEN) return;
+
+    const input = event.inputBuffer.getChannelData(0);
+    const downsampled = downsampleBuffer(input, sampleRate, 16000);
+    const pcm = float32ToPcm16(downsampled);
+
+    state.ws.send(JSON.stringify({
+      realtimeInput: {
+        audio: {
+          data: arrayBufferToBase64(pcm),
+          mimeType: 'audio/pcm;rate=16000',
+        },
+      },
+    }));
+  };
+
+  state.micSource.connect(state.processor);
+  state.processor.connect(state.audioContext.destination);
+}
+
+function playGeminiAudio(base64Audio, sampleRate = 24000) {
+  if (!base64Audio || !state.audioContext) return;
+
+  const pcm = new Int16Array(base64ToArrayBuffer(base64Audio));
+  const float32 = new Float32Array(pcm.length);
+  for (let i = 0; i < pcm.length; i += 1) {
+    float32[i] = pcm[i] / 0x8000;
+  }
+
+  const buffer = state.audioContext.createBuffer(1, float32.length, sampleRate);
+  buffer.copyToChannel(float32, 0);
+
+  const source = state.audioContext.createBufferSource();
+  source.buffer = buffer;
+  source.connect(state.audioContext.destination);
+
+  const startAt = Math.max(state.audioContext.currentTime, state.playbackTime);
+  source.start(startAt);
+  state.playbackTime = startAt + buffer.duration;
+  state.playbackSources.push(source);
+  source.onended = () => {
+    state.playbackSources = state.playbackSources.filter((item) => item !== source);
+  };
+}
+
+function stopGeminiPlayback() {
+  for (const source of state.playbackSources) {
+    try {
+      source.stop();
+    } catch (_err) {
+      // Sources that already ended can be ignored.
+    }
+  }
+  state.playbackSources = [];
+  if (state.audioContext) state.playbackTime = state.audioContext.currentTime;
+}
+
+async function flushGeminiTranscripts(event) {
+  const userText = state.geminiUserTranscript.trim();
+  const assistantText = state.geminiAssistantTranscript.trim();
+  state.geminiUserTranscript = '';
+  state.geminiAssistantTranscript = '';
+
+  if (userText) await saveTurn('user', userText, event);
+  if (assistantText) await saveTurn('assistant', assistantText, event);
+}
+
+async function handleGeminiEvent(event) {
+  logDebug(event);
+
+  if (event.setupComplete) {
+    setStatus('Live', 'live');
+  }
+
+  const serverContent = event.serverContent || {};
+  const inputText = serverContent.inputTranscription?.text || serverContent.input_transcription?.text;
+  const outputText = serverContent.outputTranscription?.text || serverContent.output_transcription?.text;
+
+  if (inputText) state.geminiUserTranscript += inputText;
+  if (outputText) state.geminiAssistantTranscript += outputText;
+
+  for (const part of serverContent.modelTurn?.parts || []) {
+    const inlineData = part.inlineData || part.inline_data;
+    if (inlineData?.data && String(inlineData.mimeType || inlineData.mime_type || '').startsWith('audio/')) {
+      playGeminiAudio(inlineData.data);
+    }
+  }
+
+  if (serverContent.interrupted) {
+    stopGeminiPlayback();
+  }
+
+  if (serverContent.turnComplete || serverContent.generationComplete) {
+    await flushGeminiTranscripts(event);
+  }
+
+  if (event.usageMetadata && state.sessionId) {
+    await api('/api/conversation/events', {
+      method: 'POST',
+      body: JSON.stringify({
+        userId: getUserId(),
+        sessionId: state.sessionId,
+        events: [{
+          provider: 'gemini',
+          model: event.model,
+          providerEventType: 'usageMetadata',
+          usage: event.usageMetadata,
+        }],
+      }),
+    });
+  }
+}
+
+async function startGeminiVoice() {
+  try {
+    setStatus('Connecting');
+    els.startButton.disabled = true;
+    els.provider.disabled = true;
+    els.userId.disabled = true;
+    els.providerStatus.textContent = 'gemini';
+    state.provider = 'gemini';
+
+    state.audioContext = new AudioContext();
+    state.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    const session = await api('/api/realtime/gemini/session', {
+      method: 'POST',
+      body: JSON.stringify({
+        userId: getUserId(),
+      }),
+    });
+
+    state.sessionId = session.sessionId;
+    state.ws = new WebSocket(session.wsUrl);
+
+    state.ws.addEventListener('open', async () => {
+      state.ws.send(JSON.stringify(session.setup));
+      setupGeminiMicCapture();
+      els.stopButton.disabled = false;
+      await refreshMemories();
+    });
+
+    state.ws.addEventListener('message', (message) => {
+      try {
+        handleGeminiEvent(JSON.parse(message.data)).catch((err) => logDebug(err.message));
+      } catch (err) {
+        logDebug(err.message);
+      }
+    });
+
+    state.ws.addEventListener('error', () => {
+      addTurn('error', 'Gemini Live connection failed.');
+      setStatus('Error', 'error');
+    });
+  } catch (err) {
+    addTurn('error', err.message);
+    setStatus('Error', 'error');
+    await stopVoice(false);
+  }
+}
+
+async function startOpenAIVoice() {
   try {
     setStatus('Connecting');
     els.startButton.disabled = true;
     els.provider.disabled = true;
     els.userId.disabled = true;
     els.providerStatus.textContent = els.provider.value;
+    state.provider = 'openai';
 
     state.pc = new RTCPeerConnection();
     state.pc.ontrack = (event) => {
@@ -219,14 +452,33 @@ async function startVoice() {
   }
 }
 
+async function startVoice() {
+  if (els.provider.value === 'gemini') {
+    await startGeminiVoice();
+    return;
+  }
+
+  await startOpenAIVoice();
+}
+
 async function stopVoice(endSession = true) {
   els.stopButton.disabled = true;
 
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    state.ws.send(JSON.stringify({ realtimeInput: { audioStreamEnd: true } }));
+    state.ws.close();
+  } else if (state.ws) {
+    state.ws.close();
+  }
+
   if (state.dc) state.dc.close();
   if (state.pc) state.pc.close();
+  if (state.processor) state.processor.disconnect();
+  if (state.micSource) state.micSource.disconnect();
   if (state.localStream) {
     state.localStream.getTracks().forEach((track) => track.stop());
   }
+  stopGeminiPlayback();
 
   if (endSession && state.sessionId) {
     try {
@@ -243,9 +495,19 @@ async function stopVoice(endSession = true) {
 
   state.pc = null;
   state.dc = null;
+  state.ws = null;
+  state.processor = null;
+  state.micSource = null;
   state.localStream = null;
+  if (state.audioContext && state.audioContext.state !== 'closed') {
+    await state.audioContext.close();
+  }
+  state.audioContext = null;
   state.sessionId = null;
+  state.provider = null;
   state.sentTurns.clear();
+  state.geminiUserTranscript = '';
+  state.geminiAssistantTranscript = '';
   els.startButton.disabled = false;
   els.provider.disabled = false;
   els.userId.disabled = false;
@@ -300,4 +562,5 @@ els.clearDebugButton.addEventListener('click', () => {
   els.debugPanel.textContent = '';
 });
 
+loadHealth().catch((err) => logDebug(err.message));
 refreshMemories().catch((err) => logDebug(err.message));

@@ -2,6 +2,7 @@ const persona = require('../config/persona');
 const { buildRealtimeInstructions, getTimeOfDay } = require('../services/promptService');
 const { getRelevantMemories, getRecentTurns } = require('../services/memoryService');
 const { ensureUser } = require('../services/conversationService');
+const { createGeminiLiveSessionToken } = require('../services/geminiLiveService');
 
 function createRealtimeRouter({ models, providers }) {
   const router = require('express').Router();
@@ -68,6 +69,64 @@ function createRealtimeRouter({ models, providers }) {
         model: providerSession.model || sessionConfig.model,
         voice: providerSession.voice || null,
         sdpAnswer: providerSession.sdpAnswer,
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.post('/gemini/session', async (req, res, next) => {
+    try {
+      const userId = req.body.userId;
+
+      if (!userId) {
+        return res.status(400).json({ error: 'userId is required.' });
+      }
+
+      await ensureUser(models, userId);
+
+      const session = await models.VoiceSession.create({
+        userId,
+        provider: 'gemini',
+        status: 'creating',
+        model: process.env.GEMINI_LIVE_MODEL || 'gemini-3.1-flash-live-preview',
+        voice: process.env.GEMINI_LIVE_VOICE || 'Kore',
+        metadata: {},
+      });
+
+      const [memories, recentTurns] = await Promise.all([
+        getRelevantMemories(models, userId),
+        getRecentTurns(models, userId, session.id),
+      ]);
+
+      const instructions = buildRealtimeInstructions({
+        memories,
+        recentTurns,
+        timeOfDay: getTimeOfDay(),
+        personaConfig: persona,
+      });
+
+      const providerSession = await createGeminiLiveSessionToken({ instructions });
+
+      await session.update({
+        providerSessionId: null,
+        status: 'active',
+        model: providerSession.model,
+        voice: providerSession.voice,
+        metadata: {
+          timeOfDay: getTimeOfDay(),
+          memoryCount: memories.length,
+          tokenMode: 'ephemeral',
+        },
+      });
+
+      res.json({
+        sessionId: session.id,
+        provider: 'gemini',
+        model: providerSession.model,
+        voice: providerSession.voice,
+        wsUrl: providerSession.wsUrl,
+        setup: providerSession.setup,
       });
     } catch (err) {
       next(err);

@@ -33,6 +33,25 @@ function buildOpenAIRealtimeSessionConfig({ instructions }) {
   };
 }
 
+function parseOpenAIError(responseText) {
+  try {
+    return JSON.parse(responseText);
+  } catch (_err) {
+    return responseText;
+  }
+}
+
+function getPublicOpenAIMessage(status, parsedError) {
+  const code = parsedError?.error?.code;
+  const type = parsedError?.error?.type;
+
+  if (status === 401) return 'OpenAI rejected the API key. Check OPENAI_API_KEY on Render.';
+  if (status === 403) return 'OpenAI Realtime access is not enabled for this key or project.';
+  if (status === 429) return 'OpenAI quota or rate limit was reached. Check billing and usage limits.';
+  if (status === 400 && (code || type)) return `OpenAI Realtime rejected the request: ${code || type}.`;
+  return 'OpenAI Realtime session creation failed.';
+}
+
 function createOpenAIRealtimeProvider({ fetchImpl = global.fetch } = {}) {
   return {
     name: 'openai',
@@ -67,10 +86,15 @@ function createOpenAIRealtimeProvider({ fetchImpl = global.fetch } = {}) {
       const responseText = await response.text();
 
       if (!response.ok) {
+        const parsedError = parseOpenAIError(responseText);
         throw new ProviderRequestError(
-          'OpenAI Realtime session creation failed.',
+          getPublicOpenAIMessage(response.status, parsedError),
           response.status >= 400 && response.status < 500 ? 400 : 502,
-          responseText,
+          {
+            provider: 'openai',
+            status: response.status,
+            error: parsedError,
+          },
         );
       }
 

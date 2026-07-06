@@ -23,7 +23,11 @@ const els = {
   clearDebugButton: document.getElementById('clearDebugButton'),
 };
 
-els.userId.value = localStorage.getItem('mira:userId') || 'local-user';
+function normalizeUserId(value) {
+  return String(value || '').trim() || 'local-user';
+}
+
+els.userId.value = normalizeUserId(localStorage.getItem('mira:userId'));
 
 function setStatus(text, mode = 'idle') {
   els.status.textContent = text;
@@ -69,7 +73,8 @@ async function api(path, options = {}) {
 }
 
 function getUserId() {
-  const userId = els.userId.value.trim();
+  const userId = normalizeUserId(els.userId.value);
+  els.userId.value = userId;
   localStorage.setItem('mira:userId', userId);
   return userId;
 }

@@ -27,10 +27,23 @@ function createApp({ models, providers, memoryExtractor } = {}) {
   app.use('/api/memory', createMemoryRouter({ models }));
 
   app.use((err, _req, res, _next) => {
-    console.error(err);
-    res.status(err.statusCode || 500).json({
-      error: err.publicMessage || 'Something went wrong.',
+    console.error('Request failed', {
+      name: err.name,
+      message: err.message,
+      statusCode: err.statusCode,
+      details: err.details,
+      stack: err.stack,
     });
+
+    const body = {
+      error: err.publicMessage || 'Something went wrong.',
+    };
+
+    if (process.env.EXPOSE_ERROR_DETAILS === 'true' && err.details) {
+      body.details = err.details;
+    }
+
+    res.status(err.statusCode || 500).json(body);
   });
 
   return app;

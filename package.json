@@ -6,6 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "preview": "node scripts/preview.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },

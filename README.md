@@ -41,6 +41,12 @@ npm start
 
 Set `DB_SYNC=true` for this MVP so Sequelize creates tables automatically. Use migrations before deploying beyond your private prototype.
 
+For a UI-only preview before setting up Postgres and OpenAI credentials:
+
+```bash
+npm run preview
+```
+
 ## Neon and Render
 
 You can use Neon for `DATABASE_URL`. Copy the Node.js connection string from Neon and keep the SSL query parameters, for example `?sslmode=require&channel_binding=require`.

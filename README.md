@@ -49,7 +49,7 @@ npm run preview
 
 ## Neon and Render
 
-You can use Neon for `DATABASE_URL`. Copy the Node.js connection string from Neon and keep the SSL query parameters, for example `?sslmode=require&channel_binding=require`.
+You can use Neon for `DATABASE_URL`. Copy the Node.js connection string from Neon and keep the SSL query parameters, for example `?sslmode=require&channel_binding=require`. Set `DB_SSL=true` on Render if your connection string does not include `sslmode`.
 
 You do need a backend for this app. The backend keeps provider API keys out of the browser, creates realtime sessions, encrypts memories, stores transcripts, and runs memory extraction.
 

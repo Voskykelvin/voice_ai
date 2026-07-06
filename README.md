@@ -53,7 +53,7 @@ You can use Neon for `DATABASE_URL`. Copy the Node.js connection string from Neo
 
 You do need a backend for this app. The backend keeps provider API keys out of the browser, creates realtime sessions, encrypts memories, stores transcripts, and runs memory extraction.
 
-Render is a good fit for the backend. Create a Web Service from this repository, use `npm ci` as the build command and `npm start` as the start command. Set `OPENAI_API_KEY`, `DATABASE_URL`, `MEMORY_ENCRYPTION_KEY`, `REALTIME_PROVIDER`, `OPENAI_REALTIME_MODEL`, `OPENAI_REALTIME_VOICE`, `OPENAI_REALTIME_BASE_URL`, `OPENAI_TRANSCRIPTION_MODEL`, `MEMORY_EXTRACT_MODEL`, `APP_ORIGIN`, and `DB_SYNC` as Render environment variables. Render supplies `PORT` in production, and locally the app defaults to port `3001`.
+Render is a good fit for the backend. Create a Web Service from this repository, use `npm install --omit=dev` as the build command and `npm start` as the start command. Set `OPENAI_API_KEY`, `DATABASE_URL`, `MEMORY_ENCRYPTION_KEY`, `REALTIME_PROVIDER`, `OPENAI_REALTIME_MODEL`, `OPENAI_REALTIME_VOICE`, `OPENAI_REALTIME_BASE_URL`, `OPENAI_TRANSCRIPTION_MODEL`, `MEMORY_EXTRACT_MODEL`, `APP_ORIGIN`, and `DB_SYNC` as Render environment variables. Render supplies `PORT` in production, and locally the app defaults to port `3001`.
 
 ## Notes
 

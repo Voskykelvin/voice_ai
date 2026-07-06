@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mira Voice</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="console">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Private MVP</p>
+          <h1>Mira Voice</h1>
+        </div>
+        <div class="statusGroup">
+          <span id="connectionStatus" class="status idle">Idle</span>
+          <span id="providerStatus" class="status">openai</span>
+        </div>
+      </header>
+
+      <section class="controls" aria-label="Voice controls">
+        <label>
+          <span>User</span>
+          <input id="userId" type="text" autocomplete="off">
+        </label>
+        <label>
+          <span>Provider</span>
+          <select id="provider">
+            <option value="openai">OpenAI Realtime</option>
+            <option value="gemini">Gemini Live</option>
+          </select>
+        </label>
+        <button id="startButton" type="button">Start</button>
+        <button id="stopButton" type="button" disabled>Stop</button>
+      </section>
+
+      <section id="transcript" class="transcript" aria-live="polite"></section>
+
+      <section class="forgetBar">
+        <input id="forgetText" type="text" placeholder="Memory text to forget">
+        <button id="forgetButton" type="button">Forget</button>
+      </section>
+    </section>
+
+    <aside class="side">
+      <section>
+        <div class="panelHeader">
+          <h2>Memories</h2>
+          <button id="refreshMemoryButton" type="button">Refresh</button>
+        </div>
+        <div id="memoryList" class="memoryList"></div>
+      </section>
+
+      <section>
+        <div class="panelHeader">
+          <h2>Debug</h2>
+          <button id="clearDebugButton" type="button">Clear</button>
+        </div>
+        <pre id="debugPanel" class="debugPanel"></pre>
+      </section>
+    </aside>
+  </main>
+
+  <audio id="remoteAudio" autoplay></audio>
+  <script src="/app.js"></script>
+</body>
+</html>

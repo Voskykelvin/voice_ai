@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: voice-ai
+    env: node
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_SYNC
+        value: true
+      - key: REALTIME_PROVIDER
+        value: openai
+      - key: OPENAI_REALTIME_MODEL
+        value: gpt-realtime-2
+      - key: OPENAI_REALTIME_VOICE
+        value: marin
+      - key: OPENAI_REALTIME_BASE_URL
+        value: https://api.openai.com/v1/realtime/calls
+      - key: OPENAI_TRANSCRIPTION_MODEL
+        value: gpt-4o-mini-transcribe
+      - key: MEMORY_EXTRACT_MODEL
+        value: gpt-5.4-nano
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: MEMORY_ENCRYPTION_KEY
+        sync: false
+      - key: APP_ORIGIN
+        sync: false

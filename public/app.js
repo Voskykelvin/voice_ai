@@ -159,6 +159,26 @@ function base64ToArrayBuffer(base64) {
   return bytes.buffer;
 }
 
+async function parseSocketJson(data) {
+  if (typeof data === 'string') {
+    return JSON.parse(data);
+  }
+
+  if (data instanceof Blob) {
+    return JSON.parse(await data.text());
+  }
+
+  if (data instanceof ArrayBuffer) {
+    return JSON.parse(new TextDecoder().decode(data));
+  }
+
+  if (ArrayBuffer.isView(data)) {
+    return JSON.parse(new TextDecoder().decode(data));
+  }
+
+  throw new Error(`Unsupported WebSocket message type: ${Object.prototype.toString.call(data)}`);
+}
+
 function downsampleBuffer(input, inputRate, outputRate) {
   if (inputRate === outputRate) return input;
   const ratio = inputRate / outputRate;
@@ -545,7 +565,9 @@ async function startGeminiVoice() {
 
     state.ws.addEventListener('message', (message) => {
       try {
-        handleGeminiEvent(JSON.parse(message.data)).catch((err) => logDebug(err.message));
+        parseSocketJson(message.data)
+          .then((event) => handleGeminiEvent(event))
+          .catch((err) => logDebug(err.message));
       } catch (err) {
         logDebug(err.message);
       }

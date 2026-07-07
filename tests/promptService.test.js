@@ -1,4 +1,8 @@
-const { buildRealtimeInstructions, getTimeOfDay } = require('../src/services/promptService');
+const {
+  buildRealtimeInstructions,
+  getTimeOfDay,
+  normalizeSessionMode,
+} = require('../src/services/promptService');
 
 describe('promptService', () => {
   it('includes persona, time context, memories, and safety boundaries', () => {
@@ -19,6 +23,7 @@ describe('promptService', () => {
           source: 'Open-Meteo',
         },
       },
+      sessionMode: 'builder',
       recentTurns: [{ role: 'user', content: 'I want this to feel warm.' }],
     });
 
@@ -29,6 +34,8 @@ describe('promptService', () => {
     expect(prompt).toContain('Africa/Nairobi');
     expect(prompt).toContain('2:15 PM');
     expect(prompt).toContain('partly cloudy');
+    expect(prompt).toContain('Active mode: Builder');
+    expect(prompt).toContain('Kelvin, I am here');
     expect(prompt).toContain('not a therapist');
     expect(prompt).toContain('self-harm');
   });
@@ -37,5 +44,10 @@ describe('promptService', () => {
     const date = new Date('2026-07-07T11:00:00.000Z');
     expect(getTimeOfDay(date, 'Africa/Nairobi')).toBe('afternoon');
     expect(getTimeOfDay(date, 'America/New_York')).toBe('morning');
+  });
+
+  it('normalizes unsupported session modes to companion', () => {
+    expect(normalizeSessionMode('playful')).toBe('playful');
+    expect(normalizeSessionMode('unknown')).toBe('companion');
   });
 });

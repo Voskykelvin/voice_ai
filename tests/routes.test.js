@@ -58,6 +58,7 @@ describe('API routes', () => {
         userId: 'local-user',
         displayName: 'Kelvin',
         timezone: 'Africa/Nairobi',
+        sessionMode: 'builder',
         provider: 'openai',
         sdpOffer: 'offer-sdp',
       })
@@ -65,6 +66,7 @@ describe('API routes', () => {
 
     expect(calls.instructions).toContain('Preferred name: Kelvin');
     expect(calls.instructions).toContain('Africa/Nairobi');
+    expect(calls.instructions).toContain('Active mode: Builder');
     expect(models.store.User[0].displayName).toBe('Kelvin');
   });
 

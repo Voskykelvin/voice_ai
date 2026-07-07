@@ -1,5 +1,33 @@
 const persona = require('../config/persona');
 
+const SESSION_MODES = {
+  companion: {
+    label: 'Companion',
+    instruction: 'Companion mode: warm, present, emotionally aware, and gently playful. Prioritize connection over productivity.',
+  },
+  builder: {
+    label: 'Builder',
+    instruction: 'Builder mode: practical, concise, product-minded, and collaborative. Help the user think through implementation, next steps, tradeoffs, and momentum.',
+  },
+  quiet: {
+    label: 'Quiet',
+    instruction: 'Quiet mode: soft, brief, unhurried, and low-stimulation. Leave more space and avoid energetic phrasing.',
+  },
+  direct: {
+    label: 'Direct',
+    instruction: 'Direct mode: clear, honest, and kindly blunt. Skip fluff, name the important thing, and ask focused questions.',
+  },
+  playful: {
+    label: 'Playful',
+    instruction: 'Playful mode: warm, witty, lightly teasing, and animated, while still being useful and emotionally careful.',
+  },
+};
+
+function normalizeSessionMode(mode) {
+  const clean = String(mode || '').trim().toLowerCase();
+  return SESSION_MODES[clean] ? clean : 'companion';
+}
+
 function getHourInTimeZone(date = new Date(), timeZone = null) {
   if (!timeZone) return date.getHours();
 
@@ -110,11 +138,22 @@ function formatLocalContext(localContext = {}) {
   return lines.length ? lines.join('\n') : '- No live local context available.';
 }
 
+function formatSessionMode(mode = 'companion') {
+  const normalized = normalizeSessionMode(mode);
+  const selected = SESSION_MODES[normalized];
+  return [
+    `- Active mode: ${selected.label}`,
+    `- ${selected.instruction}`,
+    '- Keep the identity consistent: you are always Mira. The mode changes your stance, not your name or relationship.',
+  ].join('\n');
+}
+
 function buildRealtimeInstructions({
   memories = [],
   recentTurns = [],
   userProfile = {},
   localContext = {},
+  sessionMode = 'companion',
   timeOfDay = getTimeOfDay(),
   personaConfig = persona,
 } = {}) {
@@ -124,6 +163,9 @@ function buildRealtimeInstructions({
     '# Current Context',
     toneForTimeOfDay(timeOfDay),
     formatLocalContext(localContext),
+    '',
+    '# Session Mode',
+    formatSessionMode(sessionMode),
     '',
     '# User Profile',
     'Use this quietly for personalization. If a preferred name exists, greet the user by name at the beginning of a new voice session when it feels natural. Do not overuse their name.',
@@ -144,15 +186,19 @@ function buildRealtimeInstructions({
     '- Let silences breathe. Do not fill every moment with advice.',
     '- Ask one clear question when the user seems to want reflection.',
     '- Use the current local time when greeting. Do not say good morning in the afternoon/evening.',
+    '- At the start of a new voice session, use a short Mira return ritual when natural: for example, "Kelvin, I am here." Adapt it to the time, weather, and active mode. Do not repeat the ritual later in the same session.',
     '- If asked for local happenings or live news, only answer from connected local data sources; otherwise say that live local news is not connected yet.',
   ].join('\n');
 }
 
 module.exports = {
+  SESSION_MODES,
   getTimeOfDay,
   formatCurrentLocalTime,
   buildRealtimeInstructions,
   formatMemories,
   formatLocalContext,
+  formatSessionMode,
   formatUserProfile,
+  normalizeSessionMode,
 };

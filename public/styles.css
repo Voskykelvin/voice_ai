@@ -18,6 +18,8 @@
   --shadow: rgba(96, 63, 23, 0.15);
   --soft-shadow: rgba(96, 63, 23, 0.09);
   --voice-level: 0;
+  --mode-accent: #D4AF37;
+  --mode-glow: #FFD700;
 }
 
 * {
@@ -38,6 +40,26 @@ body {
     linear-gradient(145deg, var(--bg) 0%, var(--alabaster) 78%);
   color: var(--text);
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body[data-mode="builder"] {
+  --mode-accent: #AA7C11;
+  --mode-glow: #FFD700;
+}
+
+body[data-mode="quiet"] {
+  --mode-accent: #E6C280;
+  --mode-glow: #F4DDAF;
+}
+
+body[data-mode="direct"] {
+  --mode-accent: #A74E3C;
+  --mode-glow: #D9866D;
+}
+
+body[data-mode="playful"] {
+  --mode-accent: #D4AF37;
+  --mode-glow: #FFE36E;
 }
 
 button,
@@ -313,6 +335,8 @@ h2 {
   display: grid;
   place-items: center;
   border-radius: 50%;
+  scale: 1;
+  transition: scale 120ms ease, filter 180ms ease;
 }
 
 .rotor,
@@ -328,7 +352,7 @@ h2 {
 }
 
 .rotorOne {
-  background: conic-gradient(from 20deg, transparent 0 16deg, var(--gold) 16deg 75deg, transparent 75deg 146deg, var(--listen) 146deg 164deg, transparent 164deg 252deg, var(--idle) 252deg 310deg, transparent 310deg);
+  background: conic-gradient(from 20deg, transparent 0 16deg, var(--mode-accent) 16deg 75deg, transparent 75deg 146deg, var(--mode-glow) 146deg 164deg, transparent 164deg 252deg, var(--idle) 252deg 310deg, transparent 310deg);
   filter: drop-shadow(0 0 14px rgba(255, 215, 0, 0.58));
   animation: rotateClockwise 8s linear infinite;
 }
@@ -352,7 +376,7 @@ h2 {
 .orbGlow {
   inset: 9%;
   background:
-    radial-gradient(circle at 50% 50%, rgba(255, 215, 0, calc(0.08 + var(--voice-level) * 0.18)), transparent 44%),
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--mode-glow) calc(12% + var(--voice-level) * 28%), transparent), transparent 44%),
     radial-gradient(circle, rgba(255, 253, 248, 0.68), rgba(250, 247, 240, 0.16) 58%, transparent 70%);
   border: 1px solid rgba(212, 175, 55, 0.2);
   box-shadow:
@@ -395,7 +419,7 @@ h2 {
   width: 6px;
   height: 15px;
   border-radius: 999px;
-  background: linear-gradient(180deg, var(--listen), var(--idle));
+  background: linear-gradient(180deg, var(--mode-glow), var(--mode-accent));
   box-shadow: 0 0 10px rgba(255, 215, 0, 0.34);
   transform: scaleY(0.52);
   transform-origin: center;
@@ -461,7 +485,7 @@ h2 {
 
 .controls {
   display: grid;
-  grid-template-columns: minmax(120px, 0.6fr) minmax(150px, 0.8fr) minmax(150px, 0.8fr) 200px 104px 104px;
+  grid-template-columns: minmax(110px, 0.6fr) minmax(135px, 0.75fr) minmax(135px, 0.75fr) minmax(165px, 0.95fr) 135px 96px 96px;
   gap: 12px;
   align-items: end;
   padding: 16px;
@@ -624,9 +648,26 @@ body.is-speaking .miraOrb {
   animation: orbPresence 1.4s ease-in-out infinite;
 }
 
+body.is-listening .miraOrb {
+  scale: calc(1 + var(--voice-level) * 0.035);
+}
+
+body.is-listening .rotorThree {
+  animation-duration: 9s;
+}
+
 body.is-live .rotorOne,
 body.is-speaking .rotorOne {
   animation-duration: 5s;
+}
+
+body.is-speaking .miraOrb {
+  scale: calc(1.01 + var(--voice-level) * 0.07);
+  filter: drop-shadow(0 0 20px color-mix(in srgb, var(--mode-glow) 44%, transparent));
+}
+
+body.is-speaking .waveform {
+  box-shadow: 0 14px 28px rgba(96, 63, 23, 0.1), 0 0 28px color-mix(in srgb, var(--mode-glow) 34%, transparent);
 }
 
 body.is-speaking .miraName {

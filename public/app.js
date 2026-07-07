@@ -28,6 +28,7 @@ const els = {
   location: document.getElementById('location'),
   userId: document.getElementById('userId'),
   provider: document.getElementById('provider'),
+  sessionMode: document.getElementById('sessionMode'),
   startButton: document.getElementById('startButton'),
   stopButton: document.getElementById('stopButton'),
   status: document.getElementById('connectionStatus'),
@@ -53,6 +54,8 @@ function normalizeUserId(value) {
 els.userId.value = normalizeUserId(localStorage.getItem('mira:userId'));
 els.displayName.value = String(localStorage.getItem('mira:displayName') || '').trim();
 els.location.value = String(localStorage.getItem('mira:location') || '').trim();
+els.sessionMode.value = localStorage.getItem('mira:sessionMode') || 'companion';
+document.body.dataset.mode = els.sessionMode.value;
 
 function normalizeStatusMode(text, mode) {
   if (mode && mode !== 'idle') return mode;
@@ -69,6 +72,7 @@ function setVisualMode(mode) {
   const visualMode = ['connecting', 'live', 'saving', 'error'].includes(mode) ? mode : 'idle';
   document.body.classList.remove('is-idle', 'is-connecting', 'is-live', 'is-saving', 'is-error');
   document.body.classList.add(`is-${visualMode}`);
+  document.body.classList.toggle('is-listening', visualMode === 'live');
 
   if (!els.stageState) return;
 
@@ -95,6 +99,13 @@ function pulseSpeaking(duration = 1600) {
   state.speechTimeout = window.setTimeout(() => {
     document.body.classList.remove('is-speaking');
   }, duration);
+}
+
+function getSessionMode() {
+  const mode = els.sessionMode.value || 'companion';
+  localStorage.setItem('mira:sessionMode', mode);
+  document.body.dataset.mode = mode;
+  return mode;
 }
 
 function clearGeminiSetupTimer() {
@@ -358,6 +369,7 @@ function getUserProfile() {
     displayName,
     location,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    sessionMode: getSessionMode(),
   };
 }
 
@@ -552,6 +564,7 @@ async function handleGeminiEvent(event) {
     const inlineData = part.inlineData || part.inline_data;
     if (inlineData?.data && String(inlineData.mimeType || inlineData.mime_type || '').startsWith('audio/')) {
       playGeminiAudio(inlineData.data);
+      pulseSpeaking(900);
     }
   }
 
@@ -588,6 +601,7 @@ async function startGeminiVoice() {
     els.userId.disabled = true;
     els.displayName.disabled = true;
     els.location.disabled = true;
+    els.sessionMode.disabled = true;
     els.providerStatus.textContent = 'gemini';
     state.provider = 'gemini';
 
@@ -653,6 +667,7 @@ async function startOpenAIVoice() {
     els.userId.disabled = true;
     els.displayName.disabled = true;
     els.location.disabled = true;
+    els.sessionMode.disabled = true;
     els.providerStatus.textContent = els.provider.value;
     state.provider = 'openai';
 
@@ -764,6 +779,7 @@ async function stopVoice(endSession = true) {
   els.userId.disabled = false;
   els.displayName.disabled = false;
   els.location.disabled = false;
+  els.sessionMode.disabled = false;
   if (els.status.textContent !== 'Error') {
     setStatus('Idle');
   }
@@ -816,6 +832,7 @@ els.forgetButton.addEventListener('click', forgetText);
 els.clearDebugButton.addEventListener('click', () => {
   els.debugPanel.textContent = '';
 });
+els.sessionMode.addEventListener('change', getSessionMode);
 els.toggleDebugButton.addEventListener('click', () => {
   const isOpen = els.debugDrawer.classList.toggle('is-open');
   els.toggleDebugButton.setAttribute('aria-expanded', String(isOpen));

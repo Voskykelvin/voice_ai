@@ -1,5 +1,10 @@
 const persona = require('../config/persona');
-const { buildRealtimeInstructions, formatCurrentLocalTime, getTimeOfDay } = require('../services/promptService');
+const {
+  buildRealtimeInstructions,
+  formatCurrentLocalTime,
+  getTimeOfDay,
+  normalizeSessionMode,
+} = require('../services/promptService');
 const { getRelevantMemories, getRecentTurns } = require('../services/memoryService');
 const { ensureUserProfile } = require('../services/conversationService');
 const { createGeminiLiveSessionToken } = require('../services/geminiLiveService');
@@ -15,10 +20,12 @@ async function buildRequestContext({ models, req, userId }) {
   const now = new Date();
   const timeOfDay = getTimeOfDay(now, userProfile.timezone);
   const weatherContext = await getLocalWeatherContext({ location });
+  const sessionMode = normalizeSessionMode(req.body.sessionMode);
 
   return {
     userProfile,
     timeOfDay,
+    sessionMode,
     localContext: {
       currentLocalTime: formatCurrentLocalTime(now, userProfile.timezone),
       ...(weatherContext || {}),
@@ -42,7 +49,7 @@ function createRealtimeRouter({ models, providers }) {
         return res.status(400).json({ error: 'sdpOffer is required.' });
       }
 
-      const { userProfile, timeOfDay, localContext } = await buildRequestContext({ models, req, userId });
+      const { userProfile, timeOfDay, sessionMode, localContext } = await buildRequestContext({ models, req, userId });
 
       const provider = providers.get(providerName);
       const session = await models.VoiceSession.create({
@@ -64,6 +71,7 @@ function createRealtimeRouter({ models, providers }) {
         recentTurns,
         userProfile,
         localContext,
+        sessionMode,
         timeOfDay,
         personaConfig: persona,
       });
@@ -83,6 +91,7 @@ function createRealtimeRouter({ models, providers }) {
         voice: providerSession.voice || sessionConfig.audio?.output?.voice || null,
         metadata: {
           timeOfDay,
+          sessionMode,
           memoryCount: memories.length,
           localContext,
         },
@@ -108,7 +117,7 @@ function createRealtimeRouter({ models, providers }) {
         return res.status(400).json({ error: 'userId is required.' });
       }
 
-      const { userProfile, timeOfDay, localContext } = await buildRequestContext({ models, req, userId });
+      const { userProfile, timeOfDay, sessionMode, localContext } = await buildRequestContext({ models, req, userId });
 
       const session = await models.VoiceSession.create({
         userId,
@@ -129,6 +138,7 @@ function createRealtimeRouter({ models, providers }) {
         recentTurns,
         userProfile,
         localContext,
+        sessionMode,
         timeOfDay,
         personaConfig: persona,
       });
@@ -142,6 +152,7 @@ function createRealtimeRouter({ models, providers }) {
         voice: providerSession.voice,
         metadata: {
           timeOfDay,
+          sessionMode,
           memoryCount: memories.length,
           tokenMode: 'ephemeral',
           localContext,

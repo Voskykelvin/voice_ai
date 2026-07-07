@@ -97,15 +97,21 @@
         <div id="memoryList" class="memoryList"></div>
       </section>
 
-      <section>
-        <div class="panelHeader">
-          <h2>Debug</h2>
-          <button id="clearDebugButton" type="button">Clear</button>
-        </div>
-        <pre id="debugPanel" class="debugPanel"></pre>
-      </section>
     </aside>
   </main>
+
+  <section id="debugDrawer" class="debugDrawer" aria-label="Debug panel">
+    <button id="toggleDebugButton" class="debugToggle" type="button" aria-expanded="false" aria-controls="debugPanel">
+      Debug
+    </button>
+    <div class="debugDrawerPanel">
+      <div class="panelHeader">
+        <h2>Debug</h2>
+        <button id="clearDebugButton" type="button">Clear</button>
+      </div>
+      <pre id="debugPanel" class="debugPanel"></pre>
+    </div>
+  </section>
 
   <audio id="remoteAudio" autoplay></audio>
   <script src="/app.js"></script>

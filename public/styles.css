@@ -558,6 +558,55 @@ label span {
   background: rgba(255, 255, 255, 0.38);
 }
 
+.debugDrawer {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 20;
+  display: grid;
+  justify-items: end;
+  gap: 10px;
+  pointer-events: none;
+}
+
+.debugToggle,
+.debugDrawerPanel {
+  pointer-events: auto;
+}
+
+.debugToggle {
+  min-height: 42px;
+  padding: 0 16px;
+  border-color: rgba(170, 124, 17, 0.26);
+  background: rgba(255, 253, 248, 0.9);
+  box-shadow: 0 16px 32px rgba(96, 63, 23, 0.16);
+}
+
+.debugDrawerPanel {
+  width: min(420px, calc(100vw - 32px));
+  max-height: min(58vh, 520px);
+  display: none;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(255, 253, 248, 0.94);
+  box-shadow: 0 24px 60px rgba(96, 63, 23, 0.2);
+  backdrop-filter: blur(18px);
+}
+
+.debugDrawer.is-open .debugDrawerPanel {
+  display: block;
+}
+
+.debugDrawer .panelHeader {
+  padding: 12px;
+}
+
+.debugDrawer .debugPanel {
+  min-height: 180px;
+  max-height: calc(min(58vh, 520px) - 70px);
+}
+
 body.is-connecting .rotorOne,
 body.is-saving .rotorOne {
   animation-duration: 4s;
@@ -664,7 +713,7 @@ body.is-error .miraName {
   }
 
   .side {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
   }
 }
 
@@ -740,5 +789,15 @@ body.is-error .miraName {
 
   .statusGroup {
     justify-content: flex-start;
+  }
+
+  .debugDrawer {
+    right: 10px;
+    bottom: 10px;
+  }
+
+  .debugDrawerPanel {
+    width: calc(100vw - 20px);
+    max-height: 54vh;
   }
 }

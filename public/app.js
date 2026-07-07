@@ -35,6 +35,8 @@ const els = {
   remoteAudio: document.getElementById('remoteAudio'),
   memoryList: document.getElementById('memoryList'),
   debugPanel: document.getElementById('debugPanel'),
+  debugDrawer: document.getElementById('debugDrawer'),
+  toggleDebugButton: document.getElementById('toggleDebugButton'),
   forgetText: document.getElementById('forgetText'),
   forgetButton: document.getElementById('forgetButton'),
   refreshMemoryButton: document.getElementById('refreshMemoryButton'),
@@ -131,6 +133,10 @@ function addTurn(role, text) {
 function logDebug(value) {
   const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
   els.debugPanel.textContent = `${text}\n\n${els.debugPanel.textContent}`.slice(0, 12000);
+  if (els.debugDrawer && els.toggleDebugButton) {
+    els.debugDrawer.classList.add('is-open');
+    els.toggleDebugButton.setAttribute('aria-expanded', 'true');
+  }
 }
 
 function shouldLogGeminiEvent(event) {
@@ -796,6 +802,10 @@ els.refreshMemoryButton.addEventListener('click', refreshMemories);
 els.forgetButton.addEventListener('click', forgetText);
 els.clearDebugButton.addEventListener('click', () => {
   els.debugPanel.textContent = '';
+});
+els.toggleDebugButton.addEventListener('click', () => {
+  const isOpen = els.debugDrawer.classList.toggle('is-open');
+  els.toggleDebugButton.setAttribute('aria-expanded', String(isOpen));
 });
 
 ensureVisualizerLoop();

@@ -43,6 +43,27 @@ function buildGeminiLiveConfig({ instructions }) {
   return config;
 }
 
+function buildGeminiLiveSetup({ model, liveConfig }) {
+  const generationConfig = {
+    responseModalities: liveConfig.responseModalities,
+    temperature: liveConfig.temperature,
+    thinkingConfig: liveConfig.thinkingConfig,
+    speechConfig: liveConfig.speechConfig,
+  };
+
+  Object.keys(generationConfig).forEach((key) => {
+    if (generationConfig[key] === undefined) delete generationConfig[key];
+  });
+
+  return {
+    model: modelResourceName(model),
+    generationConfig,
+    systemInstruction: liveConfig.systemInstruction,
+    inputAudioTranscription: liveConfig.inputAudioTranscription,
+    outputAudioTranscription: liveConfig.outputAudioTranscription,
+  };
+}
+
 async function createGeminiLiveSessionToken({ instructions }) {
   const apiKey = getGeminiApiKey();
   if (!apiKey) {
@@ -79,10 +100,7 @@ async function createGeminiLiveSessionToken({ instructions }) {
       tokenName: token.name,
       wsUrl: `${GEMINI_WS_BASE}?access_token=${encodeURIComponent(token.name)}`,
       setup: {
-        setup: {
-          model: modelResourceName(model),
-          ...liveConfig,
-        },
+        setup: buildGeminiLiveSetup({ model, liveConfig }),
       },
     };
   } catch (err) {
@@ -101,6 +119,7 @@ async function createGeminiLiveSessionToken({ instructions }) {
 
 module.exports = {
   buildGeminiLiveConfig,
+  buildGeminiLiveSetup,
   createGeminiLiveSessionToken,
   getGeminiModel,
 };

@@ -19,6 +19,8 @@ const state = {
   visualizerData: null,
   visualizerFrame: null,
   speechTimeout: null,
+  geminiSetupTimer: null,
+  stopping: false,
 };
 
 const els = {
@@ -87,6 +89,27 @@ function pulseSpeaking(duration = 1600) {
   state.speechTimeout = window.setTimeout(() => {
     document.body.classList.remove('is-speaking');
   }, duration);
+}
+
+function clearGeminiSetupTimer() {
+  window.clearTimeout(state.geminiSetupTimer);
+  state.geminiSetupTimer = null;
+}
+
+function startGeminiSetupTimer() {
+  clearGeminiSetupTimer();
+  state.geminiSetupTimer = window.setTimeout(() => {
+    if (state.provider !== 'gemini' || state.stopping) return;
+    addTurn('error', 'Gemini Live opened a socket but did not finish setup. Check Live API access, model availability, and browser console close details.');
+    setStatus('Error', 'error');
+    if (state.ws) state.ws.close();
+    stopVoice(false).catch((err) => logDebug(err.message));
+  }, 15000);
+}
+
+function formatCloseEvent(event) {
+  const reason = event.reason ? `: ${event.reason}` : '';
+  return `Gemini Live connection closed before setup completed. Code ${event.code}${reason}`;
 }
 
 function addTurn(role, text) {
@@ -443,7 +466,13 @@ async function handleGeminiEvent(event) {
   logDebug(event);
 
   if (event.setupComplete) {
+    clearGeminiSetupTimer();
     setStatus('Live', 'live');
+    if (!state.processor && state.localStream && state.audioContext) {
+      setupGeminiMicCapture();
+      els.stopButton.disabled = false;
+      await refreshMemories();
+    }
   }
 
   const serverContent = event.serverContent || {};
@@ -510,9 +539,8 @@ async function startGeminiVoice() {
 
     state.ws.addEventListener('open', async () => {
       state.ws.send(JSON.stringify(session.setup));
-      setupGeminiMicCapture();
       els.stopButton.disabled = false;
-      await refreshMemories();
+      startGeminiSetupTimer();
     });
 
     state.ws.addEventListener('message', (message) => {
@@ -524,10 +552,22 @@ async function startGeminiVoice() {
     });
 
     state.ws.addEventListener('error', () => {
+      clearGeminiSetupTimer();
       addTurn('error', 'Gemini Live connection failed.');
       setStatus('Error', 'error');
     });
+
+    state.ws.addEventListener('close', (event) => {
+      clearGeminiSetupTimer();
+      if (state.stopping || !state.sessionId) return;
+      if (els.status.textContent !== 'Live') {
+        addTurn('error', formatCloseEvent(event));
+        setStatus('Error', 'error');
+        stopVoice(false).catch((err) => logDebug(err.message));
+      }
+    });
   } catch (err) {
+    clearGeminiSetupTimer();
     addTurn('error', err.message);
     setStatus('Error', 'error');
     await stopVoice(false);
@@ -595,6 +635,8 @@ async function startVoice() {
 }
 
 async function stopVoice(endSession = true) {
+  state.stopping = true;
+  clearGeminiSetupTimer();
   els.stopButton.disabled = true;
 
   if (state.ws && state.ws.readyState === WebSocket.OPEN) {
@@ -642,10 +684,13 @@ async function stopVoice(endSession = true) {
   state.sentTurns.clear();
   state.geminiUserTranscript = '';
   state.geminiAssistantTranscript = '';
+  state.stopping = false;
   els.startButton.disabled = false;
   els.provider.disabled = false;
   els.userId.disabled = false;
-  setStatus('Idle');
+  if (els.status.textContent !== 'Error') {
+    setStatus('Idle');
+  }
 }
 
 async function refreshMemories() {

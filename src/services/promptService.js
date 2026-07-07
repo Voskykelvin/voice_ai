@@ -1,12 +1,46 @@
 const persona = require('../config/persona');
 
-function getTimeOfDay(date = new Date()) {
-  const hour = date.getHours();
+function getHourInTimeZone(date = new Date(), timeZone = null) {
+  if (!timeZone) return date.getHours();
+
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric',
+      hour12: false,
+      timeZone,
+    }).formatToParts(date);
+    const hour = Number(parts.find((part) => part.type === 'hour')?.value);
+    return Number.isInteger(hour) ? hour : date.getHours();
+  } catch (_err) {
+    return date.getHours();
+  }
+}
+
+function getTimeOfDay(date = new Date(), timeZone = null) {
+  const hour = getHourInTimeZone(date, timeZone);
   if (hour >= 0 && hour < 5) return 'late_night';
   if (hour >= 5 && hour < 12) return 'morning';
   if (hour >= 12 && hour < 17) return 'afternoon';
   if (hour >= 17 && hour < 22) return 'evening';
   return 'late_night';
+}
+
+function formatCurrentLocalTime(date = new Date(), timeZone = null) {
+  try {
+    const formatted = new Intl.DateTimeFormat('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZone: timeZone || undefined,
+      timeZoneName: timeZone ? 'short' : undefined,
+    }).format(date);
+    return timeZone ? `${formatted} (${timeZone})` : formatted;
+  } catch (_err) {
+    return date.toISOString();
+  }
 }
 
 function toneForTimeOfDay(timeOfDay) {
@@ -52,13 +86,35 @@ function formatUserProfile(userProfile = {}) {
     lines.push(`- User timezone: ${userProfile.timezone}`);
   }
 
+  if (userProfile.location) {
+    lines.push(`- User location: ${userProfile.location}`);
+  }
+
   return lines.length ? lines.join('\n') : '- No profile details yet.';
+}
+
+function formatLocalContext(localContext = {}) {
+  const lines = [];
+
+  if (localContext.currentLocalTime) {
+    lines.push(`- Current local date/time: ${localContext.currentLocalTime}`);
+  }
+
+  if (localContext.weather?.summary) {
+    lines.push(`- Current weather near ${localContext.weather.location}: ${localContext.weather.summary}`);
+    lines.push(`- Weather source: ${localContext.weather.source}`);
+  } else if (localContext.weatherError) {
+    lines.push(`- Weather: unavailable (${localContext.weatherError})`);
+  }
+
+  return lines.length ? lines.join('\n') : '- No live local context available.';
 }
 
 function buildRealtimeInstructions({
   memories = [],
   recentTurns = [],
   userProfile = {},
+  localContext = {},
   timeOfDay = getTimeOfDay(),
   personaConfig = persona,
 } = {}) {
@@ -67,6 +123,7 @@ function buildRealtimeInstructions({
     '',
     '# Current Context',
     toneForTimeOfDay(timeOfDay),
+    formatLocalContext(localContext),
     '',
     '# User Profile',
     'Use this quietly for personalization. If a preferred name exists, greet the user by name at the beginning of a new voice session when it feels natural. Do not overuse their name.',
@@ -86,12 +143,16 @@ function buildRealtimeInstructions({
     '- Default to 1-3 short sentences.',
     '- Let silences breathe. Do not fill every moment with advice.',
     '- Ask one clear question when the user seems to want reflection.',
+    '- Use the current local time when greeting. Do not say good morning in the afternoon/evening.',
+    '- If asked for local happenings or live news, only answer from connected local data sources; otherwise say that live local news is not connected yet.',
   ].join('\n');
 }
 
 module.exports = {
   getTimeOfDay,
+  formatCurrentLocalTime,
   buildRealtimeInstructions,
   formatMemories,
+  formatLocalContext,
   formatUserProfile,
 };

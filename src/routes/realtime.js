@@ -1,8 +1,30 @@
 const persona = require('../config/persona');
-const { buildRealtimeInstructions, getTimeOfDay } = require('../services/promptService');
+const { buildRealtimeInstructions, formatCurrentLocalTime, getTimeOfDay } = require('../services/promptService');
 const { getRelevantMemories, getRecentTurns } = require('../services/memoryService');
 const { ensureUserProfile } = require('../services/conversationService');
 const { createGeminiLiveSessionToken } = require('../services/geminiLiveService');
+const { cleanLocation, getLocalWeatherContext } = require('../services/localContextService');
+
+async function buildRequestContext({ models, req, userId }) {
+  const savedProfile = await ensureUserProfile(models, userId, {
+    displayName: req.body.displayName,
+    timezone: req.body.timezone,
+  });
+  const location = cleanLocation(req.body.location);
+  const userProfile = { ...savedProfile, location };
+  const now = new Date();
+  const timeOfDay = getTimeOfDay(now, userProfile.timezone);
+  const weatherContext = await getLocalWeatherContext({ location });
+
+  return {
+    userProfile,
+    timeOfDay,
+    localContext: {
+      currentLocalTime: formatCurrentLocalTime(now, userProfile.timezone),
+      ...(weatherContext || {}),
+    },
+  };
+}
 
 function createRealtimeRouter({ models, providers }) {
   const router = require('express').Router();
@@ -20,10 +42,7 @@ function createRealtimeRouter({ models, providers }) {
         return res.status(400).json({ error: 'sdpOffer is required.' });
       }
 
-      const userProfile = await ensureUserProfile(models, userId, {
-        displayName: req.body.displayName,
-        timezone: req.body.timezone,
-      });
+      const { userProfile, timeOfDay, localContext } = await buildRequestContext({ models, req, userId });
 
       const provider = providers.get(providerName);
       const session = await models.VoiceSession.create({
@@ -44,7 +63,8 @@ function createRealtimeRouter({ models, providers }) {
         memories,
         recentTurns,
         userProfile,
-        timeOfDay: getTimeOfDay(),
+        localContext,
+        timeOfDay,
         personaConfig: persona,
       });
 
@@ -62,8 +82,9 @@ function createRealtimeRouter({ models, providers }) {
         model: providerSession.model || sessionConfig.model,
         voice: providerSession.voice || sessionConfig.audio?.output?.voice || null,
         metadata: {
-          timeOfDay: getTimeOfDay(),
+          timeOfDay,
           memoryCount: memories.length,
+          localContext,
         },
       });
 
@@ -87,10 +108,7 @@ function createRealtimeRouter({ models, providers }) {
         return res.status(400).json({ error: 'userId is required.' });
       }
 
-      const userProfile = await ensureUserProfile(models, userId, {
-        displayName: req.body.displayName,
-        timezone: req.body.timezone,
-      });
+      const { userProfile, timeOfDay, localContext } = await buildRequestContext({ models, req, userId });
 
       const session = await models.VoiceSession.create({
         userId,
@@ -110,7 +128,8 @@ function createRealtimeRouter({ models, providers }) {
         memories,
         recentTurns,
         userProfile,
-        timeOfDay: getTimeOfDay(),
+        localContext,
+        timeOfDay,
         personaConfig: persona,
       });
 
@@ -122,9 +141,10 @@ function createRealtimeRouter({ models, providers }) {
         model: providerSession.model,
         voice: providerSession.voice,
         metadata: {
-          timeOfDay: getTimeOfDay(),
+          timeOfDay,
           memoryCount: memories.length,
           tokenMode: 'ephemeral',
+          localContext,
         },
       });
 

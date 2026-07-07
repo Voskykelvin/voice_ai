@@ -25,6 +25,7 @@ const state = {
 
 const els = {
   displayName: document.getElementById('displayName'),
+  location: document.getElementById('location'),
   userId: document.getElementById('userId'),
   provider: document.getElementById('provider'),
   startButton: document.getElementById('startButton'),
@@ -51,6 +52,7 @@ function normalizeUserId(value) {
 
 els.userId.value = normalizeUserId(localStorage.getItem('mira:userId'));
 els.displayName.value = String(localStorage.getItem('mira:displayName') || '').trim();
+els.location.value = String(localStorage.getItem('mira:location') || '').trim();
 
 function normalizeStatusMode(text, mode) {
   if (mode && mode !== 'idle') return mode;
@@ -338,15 +340,23 @@ function getUserId() {
 
 function getUserProfile() {
   const displayName = String(els.displayName.value || '').trim();
+  const location = String(els.location.value || '').trim();
   els.displayName.value = displayName;
+  els.location.value = location;
   if (displayName) {
     localStorage.setItem('mira:displayName', displayName);
   } else {
     localStorage.removeItem('mira:displayName');
   }
+  if (location) {
+    localStorage.setItem('mira:location', location);
+  } else {
+    localStorage.removeItem('mira:location');
+  }
 
   return {
     displayName,
+    location,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   };
 }
@@ -577,6 +587,7 @@ async function startGeminiVoice() {
     els.provider.disabled = true;
     els.userId.disabled = true;
     els.displayName.disabled = true;
+    els.location.disabled = true;
     els.providerStatus.textContent = 'gemini';
     state.provider = 'gemini';
 
@@ -641,6 +652,7 @@ async function startOpenAIVoice() {
     els.provider.disabled = true;
     els.userId.disabled = true;
     els.displayName.disabled = true;
+    els.location.disabled = true;
     els.providerStatus.textContent = els.provider.value;
     state.provider = 'openai';
 
@@ -751,6 +763,7 @@ async function stopVoice(endSession = true) {
   els.provider.disabled = false;
   els.userId.disabled = false;
   els.displayName.disabled = false;
+  els.location.disabled = false;
   if (els.status.textContent !== 'Error') {
     setStatus('Idle');
   }

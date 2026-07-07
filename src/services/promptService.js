@@ -41,9 +41,24 @@ function formatRecentTurns(turns) {
     .join('\n');
 }
 
+function formatUserProfile(userProfile = {}) {
+  const lines = [];
+
+  if (userProfile.displayName) {
+    lines.push(`- Preferred name: ${userProfile.displayName}`);
+  }
+
+  if (userProfile.timezone) {
+    lines.push(`- User timezone: ${userProfile.timezone}`);
+  }
+
+  return lines.length ? lines.join('\n') : '- No profile details yet.';
+}
+
 function buildRealtimeInstructions({
   memories = [],
   recentTurns = [],
+  userProfile = {},
   timeOfDay = getTimeOfDay(),
   personaConfig = persona,
 } = {}) {
@@ -52,6 +67,10 @@ function buildRealtimeInstructions({
     '',
     '# Current Context',
     toneForTimeOfDay(timeOfDay),
+    '',
+    '# User Profile',
+    'Use this quietly for personalization. If a preferred name exists, greet the user by name at the beginning of a new voice session when it feels natural. Do not overuse their name.',
+    formatUserProfile(userProfile),
     '',
     '# Saved Memories',
     'Use these quietly for personalization. Do not recite them unless directly relevant.',
@@ -74,4 +93,5 @@ module.exports = {
   getTimeOfDay,
   buildRealtimeInstructions,
   formatMemories,
+  formatUserProfile,
 };

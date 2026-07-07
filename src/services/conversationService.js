@@ -2,24 +2,86 @@ const { encryptText, stableContentHash } = require('./cryptoService');
 const { detectCrisis } = require('./safetyService');
 const { createMemory } = require('./memoryService');
 
-async function ensureUser(models, userId) {
+function cleanProfileValue(value) {
+  const clean = String(value || '').trim();
+  return clean || null;
+}
+
+function normalizeUserProfile({ displayName, timezone } = {}) {
+  return {
+    displayName: cleanProfileValue(displayName),
+    timezone: cleanProfileValue(timezone),
+  };
+}
+
+async function ensureUser(models, userId, profile = {}) {
   if (!models.User || !userId) return;
 
+  const normalizedProfile = normalizeUserProfile(profile);
+  const hasProfileUpdate = Object.values(normalizedProfile).some(Boolean);
+
   if (models.User.findOrCreate) {
-    await models.User.findOrCreate({
+    const [user] = await models.User.findOrCreate({
       where: { id: userId },
-      defaults: { id: userId },
+      defaults: { id: userId, ...normalizedProfile },
     });
-    return;
+    if (hasProfileUpdate && user?.update) {
+      await user.update(Object.fromEntries(
+        Object.entries(normalizedProfile).filter(([, value]) => value),
+      ));
+    }
+    return user;
+  }
+
+  if (models.User.findOne) {
+    const existing = await models.User.findOne({ where: { id: userId } });
+    if (existing) {
+      if (hasProfileUpdate && existing.update) {
+        await existing.update(Object.fromEntries(
+          Object.entries(normalizedProfile).filter(([, value]) => value),
+        ));
+      }
+      return existing;
+    }
   }
 
   if (models.User.create) {
     try {
-      await models.User.create({ id: userId });
+      return await models.User.create({ id: userId, ...normalizedProfile });
     } catch (_err) {
       // Fake test stores and unique constraints can safely ignore duplicates.
     }
   }
+}
+
+async function getUserProfile(models, userId) {
+  if (!models.User?.findOne || !userId) return {};
+
+  const user = await models.User.findOne({ where: { id: userId } });
+  if (!user) return {};
+
+  return {
+    displayName: user.displayName || null,
+    timezone: user.timezone || null,
+  };
+}
+
+async function ensureUserProfile(models, userId, profile = {}) {
+  const user = await ensureUser(models, userId, profile);
+
+  if (user) {
+    return {
+      displayName: user.displayName || null,
+      timezone: user.timezone || null,
+    };
+  }
+
+  const normalizedProfile = normalizeUserProfile(profile);
+  if (Object.values(normalizedProfile).some(Boolean)) {
+    return normalizedProfile;
+  }
+
+  return getUserProfile(models, userId);
 }
 
 async function maybeCreateSafetyMarker(models, { userId, sessionId, content }) {
@@ -110,6 +172,9 @@ async function saveUsageEvent(models, {
 
 module.exports = {
   ensureUser,
+  ensureUserProfile,
+  getUserProfile,
+  normalizeUserProfile,
   saveConversationTurn,
   saveUsageEvent,
 };

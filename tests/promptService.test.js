@@ -10,12 +10,15 @@ describe('promptService', () => {
         importance: 5,
         isSensitive: false,
       }],
+      userProfile: { displayName: 'Kelvin', timezone: 'Africa/Nairobi' },
       recentTurns: [{ role: 'user', content: 'I want this to feel warm.' }],
     });
 
     expect(prompt).toContain('You are Mira');
     expect(prompt).toContain('Late night');
     expect(prompt).toContain('voice AI companion');
+    expect(prompt).toContain('Preferred name: Kelvin');
+    expect(prompt).toContain('Africa/Nairobi');
     expect(prompt).toContain('not a therapist');
     expect(prompt).toContain('self-harm');
   });

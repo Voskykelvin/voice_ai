@@ -24,6 +24,7 @@ const state = {
 };
 
 const els = {
+  displayName: document.getElementById('displayName'),
   userId: document.getElementById('userId'),
   provider: document.getElementById('provider'),
   startButton: document.getElementById('startButton'),
@@ -47,6 +48,7 @@ function normalizeUserId(value) {
 }
 
 els.userId.value = normalizeUserId(localStorage.getItem('mira:userId'));
+els.displayName.value = String(localStorage.getItem('mira:displayName') || '').trim();
 
 function normalizeStatusMode(text, mode) {
   if (mode && mode !== 'idle') return mode;
@@ -315,6 +317,21 @@ function getUserId() {
   return userId;
 }
 
+function getUserProfile() {
+  const displayName = String(els.displayName.value || '').trim();
+  els.displayName.value = displayName;
+  if (displayName) {
+    localStorage.setItem('mira:displayName', displayName);
+  } else {
+    localStorage.removeItem('mira:displayName');
+  }
+
+  return {
+    displayName,
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
+}
+
 async function saveTurn(role, content, event) {
   const clean = String(content || '').trim();
   if (!clean || !state.sessionId) return;
@@ -540,6 +557,7 @@ async function startGeminiVoice() {
     els.startButton.disabled = true;
     els.provider.disabled = true;
     els.userId.disabled = true;
+    els.displayName.disabled = true;
     els.providerStatus.textContent = 'gemini';
     state.provider = 'gemini';
 
@@ -551,6 +569,7 @@ async function startGeminiVoice() {
       method: 'POST',
       body: JSON.stringify({
         userId: getUserId(),
+        ...getUserProfile(),
       }),
     });
 
@@ -602,6 +621,7 @@ async function startOpenAIVoice() {
     els.startButton.disabled = true;
     els.provider.disabled = true;
     els.userId.disabled = true;
+    els.displayName.disabled = true;
     els.providerStatus.textContent = els.provider.value;
     state.provider = 'openai';
 
@@ -631,6 +651,7 @@ async function startOpenAIVoice() {
       method: 'POST',
       body: JSON.stringify({
         userId: getUserId(),
+        ...getUserProfile(),
         provider: els.provider.value,
         sdpOffer: offer.sdp,
       }),
@@ -710,6 +731,7 @@ async function stopVoice(endSession = true) {
   els.startButton.disabled = false;
   els.provider.disabled = false;
   els.userId.disabled = false;
+  els.displayName.disabled = false;
   if (els.status.textContent !== 'Error') {
     setStatus('Idle');
   }

@@ -1,7 +1,7 @@
 const persona = require('../config/persona');
 const { buildRealtimeInstructions, getTimeOfDay } = require('../services/promptService');
 const { getRelevantMemories, getRecentTurns } = require('../services/memoryService');
-const { ensureUser } = require('../services/conversationService');
+const { ensureUserProfile } = require('../services/conversationService');
 const { createGeminiLiveSessionToken } = require('../services/geminiLiveService');
 
 function createRealtimeRouter({ models, providers }) {
@@ -20,7 +20,10 @@ function createRealtimeRouter({ models, providers }) {
         return res.status(400).json({ error: 'sdpOffer is required.' });
       }
 
-      await ensureUser(models, userId);
+      const userProfile = await ensureUserProfile(models, userId, {
+        displayName: req.body.displayName,
+        timezone: req.body.timezone,
+      });
 
       const provider = providers.get(providerName);
       const session = await models.VoiceSession.create({
@@ -40,6 +43,7 @@ function createRealtimeRouter({ models, providers }) {
       const instructions = buildRealtimeInstructions({
         memories,
         recentTurns,
+        userProfile,
         timeOfDay: getTimeOfDay(),
         personaConfig: persona,
       });
@@ -83,7 +87,10 @@ function createRealtimeRouter({ models, providers }) {
         return res.status(400).json({ error: 'userId is required.' });
       }
 
-      await ensureUser(models, userId);
+      const userProfile = await ensureUserProfile(models, userId, {
+        displayName: req.body.displayName,
+        timezone: req.body.timezone,
+      });
 
       const session = await models.VoiceSession.create({
         userId,
@@ -102,6 +109,7 @@ function createRealtimeRouter({ models, providers }) {
       const instructions = buildRealtimeInstructions({
         memories,
         recentTurns,
+        userProfile,
         timeOfDay: getTimeOfDay(),
         personaConfig: persona,
       });

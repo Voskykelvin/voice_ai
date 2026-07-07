@@ -2,12 +2,13 @@ const request = require('supertest');
 const { createApp } = require('../src/app');
 const { createFakeModels } = require('./fakeModels');
 
-function createMockProviders() {
+function createMockProviders(calls = {}) {
   return {
     get() {
       return {
         name: 'openai',
         buildSessionConfig({ instructions }) {
+          calls.instructions = instructions;
           return {
             type: 'realtime',
             model: 'gpt-realtime-2',
@@ -44,6 +45,27 @@ describe('API routes', () => {
     expect(response.body.sdpAnswer).toBe('mock-answer-sdp');
     expect(response.body.sessionId).toBeTruthy();
     expect(models.store.VoiceSession[0].status).toBe('active');
+  });
+
+  it('adds the preferred display name to realtime instructions', async () => {
+    const models = createFakeModels();
+    const calls = {};
+    const app = createApp({ models, providers: createMockProviders(calls) });
+
+    await request(app)
+      .post('/api/realtime/session')
+      .send({
+        userId: 'local-user',
+        displayName: 'Kelvin',
+        timezone: 'Africa/Nairobi',
+        provider: 'openai',
+        sdpOffer: 'offer-sdp',
+      })
+      .expect(200);
+
+    expect(calls.instructions).toContain('Preferred name: Kelvin');
+    expect(calls.instructions).toContain('Africa/Nairobi');
+    expect(models.store.User[0].displayName).toBe('Kelvin');
   });
 
   it('saves conversation events and ends a session with memory extraction', async () => {

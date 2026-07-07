@@ -13,6 +13,12 @@ const state = {
   sentTurns: new Set(),
   geminiUserTranscript: '',
   geminiAssistantTranscript: '',
+  visualizerContext: null,
+  visualizerSource: null,
+  visualizerAnalyser: null,
+  visualizerData: null,
+  visualizerFrame: null,
+  speechTimeout: null,
 };
 
 const els = {
@@ -30,6 +36,8 @@ const els = {
   forgetButton: document.getElementById('forgetButton'),
   refreshMemoryButton: document.getElementById('refreshMemoryButton'),
   clearDebugButton: document.getElementById('clearDebugButton'),
+  stageState: document.getElementById('stageState'),
+  waveformBars: document.querySelectorAll('.waveform span'),
 };
 
 function normalizeUserId(value) {
@@ -38,9 +46,47 @@ function normalizeUserId(value) {
 
 els.userId.value = normalizeUserId(localStorage.getItem('mira:userId'));
 
+function normalizeStatusMode(text, mode) {
+  if (mode && mode !== 'idle') return mode;
+
+  const lowered = String(text || '').toLowerCase();
+  if (lowered.includes('connect')) return 'connecting';
+  if (lowered.includes('sav')) return 'saving';
+  if (lowered.includes('error')) return 'error';
+  if (lowered.includes('live')) return 'live';
+  return mode || 'idle';
+}
+
+function setVisualMode(mode) {
+  const visualMode = ['connecting', 'live', 'saving', 'error'].includes(mode) ? mode : 'idle';
+  document.body.classList.remove('is-idle', 'is-connecting', 'is-live', 'is-saving', 'is-error');
+  document.body.classList.add(`is-${visualMode}`);
+
+  if (!els.stageState) return;
+
+  const labels = {
+    idle: 'Standby',
+    connecting: 'Opening channel',
+    live: 'Voice link live',
+    saving: 'Saving memory',
+    error: 'Signal fault',
+  };
+  els.stageState.textContent = labels[visualMode];
+}
+
 function setStatus(text, mode = 'idle') {
+  const statusMode = normalizeStatusMode(text, mode);
   els.status.textContent = text;
-  els.status.className = `status ${mode}`;
+  els.status.className = `status ${statusMode}`;
+  setVisualMode(statusMode);
+}
+
+function pulseSpeaking(duration = 1600) {
+  document.body.classList.add('is-speaking');
+  window.clearTimeout(state.speechTimeout);
+  state.speechTimeout = window.setTimeout(() => {
+    document.body.classList.remove('is-speaking');
+  }, duration);
 }
 
 function addTurn(role, text) {
@@ -49,6 +95,12 @@ function addTurn(role, text) {
   node.innerHTML = `<span class="role">${role}</span>${escapeHtml(text)}`;
   els.transcript.appendChild(node);
   els.transcript.scrollTop = els.transcript.scrollHeight;
+
+  if (role === 'assistant') {
+    pulseSpeaking(2200);
+  } else if (role === 'user') {
+    pulseSpeaking(900);
+  }
 }
 
 function logDebug(value) {
@@ -108,6 +160,85 @@ function float32ToPcm16(float32) {
     pcm[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
   }
   return pcm.buffer;
+}
+
+function renderWaveform(level, data) {
+  const bars = Array.from(els.waveformBars || []);
+  if (!bars.length) return;
+
+  const time = performance.now() / 1000;
+  const live = document.body.classList.contains('is-live') || document.body.classList.contains('is-speaking');
+  const energy = live ? Math.max(level, 0.18) : Math.max(level, 0.05);
+  document.documentElement.style.setProperty('--voice-level', energy.toFixed(3));
+
+  bars.forEach((bar, index) => {
+    const sample = data?.length ? data[(index * 9) % data.length] / 255 : 0;
+    const drift = (Math.sin(time * (1.7 + index * 0.08) + index * 0.9) + 1) / 2;
+    const height = 0.28 + Math.min(2.8, energy * 2.5 + sample * 1.9 + drift * (live ? 0.52 : 0.18));
+    bar.style.transform = `scaleY(${height.toFixed(3)})`;
+    bar.style.opacity = String(Math.min(1, 0.38 + energy + sample + drift * 0.22));
+  });
+}
+
+function animateVisualizer() {
+  let level = 0;
+  let data = null;
+
+  if (state.visualizerAnalyser && state.visualizerData) {
+    state.visualizerAnalyser.getByteFrequencyData(state.visualizerData);
+    data = state.visualizerData;
+    let total = 0;
+    for (const value of data) total += value;
+    level = Math.min(1, (total / data.length / 255) * 2.8);
+  }
+
+  renderWaveform(level, data);
+  state.visualizerFrame = window.requestAnimationFrame(animateVisualizer);
+}
+
+function ensureVisualizerLoop() {
+  if (!state.visualizerFrame) {
+    state.visualizerFrame = window.requestAnimationFrame(animateVisualizer);
+  }
+}
+
+async function stopVoiceMeter() {
+  if (state.visualizerSource) {
+    try {
+      state.visualizerSource.disconnect();
+    } catch (_err) {
+      // Already-disconnected audio nodes are harmless.
+    }
+  }
+
+  if (state.visualizerContext && state.visualizerContext.state !== 'closed') {
+    await state.visualizerContext.close();
+  }
+
+  state.visualizerContext = null;
+  state.visualizerSource = null;
+  state.visualizerAnalyser = null;
+  state.visualizerData = null;
+}
+
+async function startVoiceMeter(stream) {
+  await stopVoiceMeter();
+
+  try {
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor || !stream) return;
+
+    state.visualizerContext = new AudioContextCtor();
+    state.visualizerSource = state.visualizerContext.createMediaStreamSource(stream);
+    state.visualizerAnalyser = state.visualizerContext.createAnalyser();
+    state.visualizerAnalyser.fftSize = 256;
+    state.visualizerAnalyser.smoothingTimeConstant = 0.78;
+    state.visualizerData = new Uint8Array(state.visualizerAnalyser.frequencyBinCount);
+    state.visualizerSource.connect(state.visualizerAnalyser);
+    ensureVisualizerLoop();
+  } catch (err) {
+    logDebug(`Visualizer unavailable: ${err.message}`);
+  }
 }
 
 async function api(path, options = {}) {
@@ -365,6 +496,7 @@ async function startGeminiVoice() {
 
     state.audioContext = new AudioContext();
     state.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    await startVoiceMeter(state.localStream);
 
     const session = await api('/api/realtime/gemini/session', {
       method: 'POST',
@@ -417,6 +549,7 @@ async function startOpenAIVoice() {
     };
 
     state.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    await startVoiceMeter(state.localStream);
     state.localStream.getTracks().forEach((track) => state.pc.addTrack(track, state.localStream));
 
     state.dc = state.pc.createDataChannel('oai-events');
@@ -478,6 +611,7 @@ async function stopVoice(endSession = true) {
   if (state.localStream) {
     state.localStream.getTracks().forEach((track) => track.stop());
   }
+  await stopVoiceMeter();
   stopGeminiPlayback();
 
   if (endSession && state.sessionId) {
@@ -562,5 +696,6 @@ els.clearDebugButton.addEventListener('click', () => {
   els.debugPanel.textContent = '';
 });
 
+ensureVisualizerLoop();
 loadHealth().catch((err) => logDebug(err.message));
 refreshMemories().catch((err) => logDebug(err.message));

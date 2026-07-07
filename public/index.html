@@ -6,19 +6,61 @@
   <title>Mira Voice</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
-<body>
+<body class="is-idle">
+  <div class="ambientCanvas" aria-hidden="true"></div>
   <main class="shell">
     <section class="console">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">Private MVP</p>
-          <h1>Mira Voice</h1>
+        <div class="brandLockup">
+          <span class="brandMark" aria-hidden="true">
+            <span></span>
+          </span>
+          <div>
+            <p class="eyebrow">Private Voice Engine</p>
+            <h1>Mira Voice</h1>
+          </div>
         </div>
         <div class="statusGroup">
           <span id="connectionStatus" class="status idle">Idle</span>
           <span id="providerStatus" class="status">openai</span>
         </div>
       </header>
+
+      <section class="voiceStage" aria-label="Voice presence">
+        <img class="portraitImage" src="/assets/mira-portrait-hero.png" alt="">
+        <div class="portraitVeil" aria-hidden="true"></div>
+
+        <div class="stageCopy">
+          <p class="eyebrow">Realtime Companion</p>
+          <h2 id="stageState">Standby</h2>
+        </div>
+
+        <div id="visualizer" class="visualizer" aria-hidden="true">
+          <div class="miraOrb">
+            <div class="rotor rotorOne"></div>
+            <div class="rotor rotorTwo"></div>
+            <div class="rotor rotorThree"></div>
+            <div class="orbGlow"></div>
+            <span class="miraName">Mira</span>
+          </div>
+          <div class="waveform" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+        </div>
+
+        <section id="transcript" class="transcript" aria-live="polite"></section>
+      </section>
 
       <section class="controls" aria-label="Voice controls">
         <label>
@@ -32,15 +74,13 @@
             <option value="gemini">Gemini Live</option>
           </select>
         </label>
-        <button id="startButton" type="button">Start</button>
-        <button id="stopButton" type="button" disabled>Stop</button>
+        <button id="startButton" class="primaryAction" type="button">Start</button>
+        <button id="stopButton" class="quietAction" type="button" disabled>Stop</button>
       </section>
-
-      <section id="transcript" class="transcript" aria-live="polite"></section>
 
       <section class="forgetBar">
         <input id="forgetText" type="text" placeholder="Memory text to forget">
-        <button id="forgetButton" type="button">Forget</button>
+        <button id="forgetButton" class="quietAction" type="button">Forget</button>
       </section>
     </section>
 

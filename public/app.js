@@ -133,6 +133,19 @@ function logDebug(value) {
   els.debugPanel.textContent = `${text}\n\n${els.debugPanel.textContent}`.slice(0, 12000);
 }
 
+function shouldLogGeminiEvent(event) {
+  if (!event || typeof event !== 'object') return true;
+  if (event.error || event.goAway) return true;
+  if (event.setupComplete) return true;
+  if (event.serverContent?.interrupted) return true;
+  return false;
+}
+
+function logGeminiEvent(event) {
+  if (!shouldLogGeminiEvent(event)) return;
+  logDebug(event);
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -500,7 +513,7 @@ async function flushGeminiTranscripts(event) {
 }
 
 async function handleGeminiEvent(event) {
-  logDebug(event);
+  logGeminiEvent(event);
 
   if (event.setupComplete) {
     clearGeminiSetupTimer();

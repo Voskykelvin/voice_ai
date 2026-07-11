@@ -1,5 +1,15 @@
 const GEOCODE_URL = 'https://geocoding-api.open-meteo.com/v1/search';
 const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
+const weatherCache = new Map();
+const WEATHER_CACHE_MS = 10 * 60 * 1000;
+
+function withDeadline(promise, timeoutMs, fallback) {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((resolve) => { timer = setTimeout(() => resolve(fallback), timeoutMs); }),
+  ]).finally(() => clearTimeout(timer));
+}
 
 const WEATHER_CODES = {
   0: 'clear sky',
@@ -100,14 +110,20 @@ async function getLocalWeatherContext({ location, fetchImpl = global.fetch } = {
   const clean = cleanLocation(location);
   if (!clean || !fetchImpl) return null;
 
-  try {
-    const place = await geocodeLocation(clean, fetchImpl);
-    if (!place) {
-      return { weatherError: `location not found for "${clean}"` };
-    }
+  const cacheKey = clean.toLowerCase();
+  const cached = weatherCache.get(cacheKey);
+  if (cached && Date.now() - cached.savedAt < WEATHER_CACHE_MS) return cached.value;
 
-    const weather = await getWeatherForPlace(place, fetchImpl);
-    return { weather };
+  try {
+    const lookup = (async () => {
+      const place = await geocodeLocation(clean, fetchImpl);
+      if (!place) return { weatherError: `location not found for "${clean}"` };
+      return { weather: await getWeatherForPlace(place, fetchImpl) };
+    })();
+    const timeoutMs = Number(process.env.WEATHER_TIMEOUT_MS || 700);
+    const result = await withDeadline(lookup, timeoutMs, { weatherError: 'weather lookup timed out' });
+    if (result.weather) weatherCache.set(cacheKey, { savedAt: Date.now(), value: result });
+    return result;
   } catch (err) {
     return { weatherError: err.message };
   }

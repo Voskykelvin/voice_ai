@@ -21,6 +21,20 @@ const state = {
   speechTimeout: null,
   geminiSetupTimer: null,
   stopping: false,
+  reconnectTimer: null,
+  reconnectAttempts: 0,
+  reconnectCount: 0,
+  sessionStartedAt: 0,
+  connectionLatencyMs: null,
+};
+
+const MIC_CONSTRAINTS = {
+  audio: {
+    channelCount: 1,
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+  },
 };
 
 const els = {
@@ -44,6 +58,8 @@ const els = {
   refreshMemoryButton: document.getElementById('refreshMemoryButton'),
   clearDebugButton: document.getElementById('clearDebugButton'),
   stageState: document.getElementById('stageState'),
+  stageHint: document.getElementById('stageHint'),
+  timeGreeting: document.getElementById('timeGreeting'),
   waveformBars: document.querySelectorAll('.waveform span'),
 };
 
@@ -56,6 +72,13 @@ els.displayName.value = String(localStorage.getItem('mira:displayName') || '').t
 els.location.value = String(localStorage.getItem('mira:location') || '').trim();
 els.sessionMode.value = localStorage.getItem('mira:sessionMode') || 'companion';
 document.body.dataset.mode = els.sessionMode.value;
+
+function setTimeGreeting() {
+  if (!els.timeGreeting) return;
+  const hour = new Date().getHours();
+  const moment = hour < 5 ? 'A quiet late-night space' : hour < 12 ? 'Good morning' : hour < 17 ? 'A moment for you' : hour < 22 ? 'Good evening' : 'A quiet late-night space';
+  els.timeGreeting.textContent = moment;
+}
 
 function normalizeStatusMode(text, mode) {
   if (mode && mode !== 'idle') return mode;
@@ -77,13 +100,22 @@ function setVisualMode(mode) {
   if (!els.stageState) return;
 
   const labels = {
-    idle: 'Standby',
-    connecting: 'Opening channel',
-    live: 'Voice link live',
-    saving: 'Saving memory',
-    error: 'Signal fault',
+    idle: 'What’s on your mind?',
+    connecting: 'Mira is joining…',
+    live: 'I’m listening.',
+    saving: 'Keeping this moment…',
+    error: 'We lost the thread.',
   };
   els.stageState.textContent = labels[visualMode];
+  if (els.stageHint) {
+    els.stageHint.textContent = {
+      idle: 'No agenda. Start wherever you are.',
+      connecting: 'Opening a private voice channel.',
+      live: 'Speak naturally — you can pause or interrupt anytime.',
+      saving: 'Saving the pieces you asked Mira to remember.',
+      error: 'Try reconnecting when you’re ready.',
+    }[visualMode];
+  }
 }
 
 function setStatus(text, mode = 'idle') {
@@ -91,6 +123,24 @@ function setStatus(text, mode = 'idle') {
   els.status.textContent = text;
   els.status.className = `status ${statusMode}`;
   setVisualMode(statusMode);
+}
+
+function clearReconnectTimer() {
+  window.clearTimeout(state.reconnectTimer);
+  state.reconnectTimer = null;
+}
+
+function scheduleReconnect(reason) {
+  if (state.stopping || !state.sessionId || state.reconnectTimer || state.reconnectAttempts >= 2) return;
+  state.reconnectAttempts += 1;
+  state.reconnectCount += 1;
+  setStatus('Reconnecting', 'connecting');
+  logDebug(`Voice connection interrupted (${reason}). Reconnect attempt ${state.reconnectAttempts}.`);
+  state.reconnectTimer = window.setTimeout(async () => {
+    state.reconnectTimer = null;
+    await stopVoice(false);
+    await startVoice();
+  }, 1200 * state.reconnectAttempts);
 }
 
 function pulseSpeaking(duration = 1600) {
@@ -146,10 +196,6 @@ function addTurn(role, text) {
 function logDebug(value) {
   const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
   els.debugPanel.textContent = `${text}\n\n${els.debugPanel.textContent}`.slice(0, 12000);
-  if (els.debugDrawer && els.toggleDebugButton) {
-    els.debugDrawer.classList.add('is-open');
-    els.toggleDebugButton.setAttribute('aria-expanded', 'true');
-  }
 }
 
 function shouldLogGeminiEvent(event) {
@@ -417,6 +463,17 @@ function extractResponseTexts(event) {
 async function handleRealtimeEvent(event) {
   logDebug(event);
 
+  if (event.type === 'input_audio_buffer.speech_started') {
+    setStatus('Listening', 'live');
+    document.body.classList.remove('is-speaking');
+  }
+  if (event.type === 'input_audio_buffer.speech_stopped') setStatus('Thinking', 'live');
+  if (event.type === 'response.created') setStatus('Responding', 'live');
+  if (event.type === 'response.output_audio.delta') {
+    setStatus('Mira is speaking', 'live');
+    pulseSpeaking(700);
+  }
+
   if (event.type === 'response.output_audio_transcript.done' && event.transcript) {
     await saveTurn('assistant', event.transcript, event);
   }
@@ -467,7 +524,7 @@ async function handleRealtimeEvent(event) {
 function setupGeminiMicCapture() {
   const sampleRate = state.audioContext.sampleRate;
   state.micSource = state.audioContext.createMediaStreamSource(state.localStream);
-  state.processor = state.audioContext.createScriptProcessor(4096, 1, 1);
+  state.processor = state.audioContext.createScriptProcessor(2048, 1, 1);
 
   state.processor.onaudioprocess = (event) => {
     const output = event.outputBuffer.getChannelData(0);
@@ -545,6 +602,7 @@ async function handleGeminiEvent(event) {
 
   if (event.setupComplete) {
     clearGeminiSetupTimer();
+    state.connectionLatencyMs = Math.round(performance.now() - state.sessionStartedAt);
     setStatus('Live', 'live');
     if (!state.processor && state.localStream && state.audioContext) {
       setupGeminiMicCapture();
@@ -605,8 +663,9 @@ async function startGeminiVoice() {
     els.providerStatus.textContent = 'gemini';
     state.provider = 'gemini';
 
-    state.audioContext = new AudioContext();
-    state.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    state.sessionStartedAt = performance.now();
+    state.audioContext = new AudioContext({ latencyHint: 'interactive' });
+    state.localStream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
     await startVoiceMeter(state.localStream);
 
     const session = await api('/api/realtime/gemini/session', {
@@ -645,10 +704,12 @@ async function startGeminiVoice() {
     state.ws.addEventListener('close', (event) => {
       clearGeminiSetupTimer();
       if (state.stopping || !state.sessionId) return;
-      if (els.status.textContent !== 'Live') {
+      if (!document.body.classList.contains('is-live')) {
         addTurn('error', formatCloseEvent(event));
         setStatus('Error', 'error');
         stopVoice(false).catch((err) => logDebug(err.message));
+      } else {
+        scheduleReconnect(`Gemini socket closed with code ${event.code}`);
       }
     });
   } catch (err) {
@@ -672,11 +733,24 @@ async function startOpenAIVoice() {
     state.provider = 'openai';
 
     state.pc = new RTCPeerConnection();
+    const activePc = state.pc;
+    state.sessionStartedAt = performance.now();
     state.pc.ontrack = (event) => {
       els.remoteAudio.srcObject = event.streams[0];
     };
 
-    state.localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    state.pc.addEventListener('connectionstatechange', () => {
+      if (state.pc !== activePc || state.stopping) return;
+      if (activePc.connectionState === 'connected') {
+        state.connectionLatencyMs = Math.round(performance.now() - state.sessionStartedAt);
+        state.reconnectAttempts = 0;
+        logDebug(`Voice connected in ${state.connectionLatencyMs}ms.`);
+      } else if (activePc.connectionState === 'failed') {
+        scheduleReconnect('WebRTC failed');
+      }
+    });
+
+    state.localStream = await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS);
     await startVoiceMeter(state.localStream);
     state.localStream.getTracks().forEach((track) => state.pc.addTrack(track, state.localStream));
 
@@ -725,6 +799,7 @@ async function startVoice() {
 
 async function stopVoice(endSession = true) {
   state.stopping = true;
+  clearReconnectTimer();
   clearGeminiSetupTimer();
   els.stopButton.disabled = true;
 
@@ -750,7 +825,13 @@ async function stopVoice(endSession = true) {
       setStatus('Saving');
       await api(`/api/conversation/${state.sessionId}/end`, {
         method: 'POST',
-        body: JSON.stringify({ userId: getUserId() }),
+        body: JSON.stringify({
+          userId: getUserId(),
+          metrics: {
+            connectionLatencyMs: state.connectionLatencyMs,
+            reconnectAttempts: state.reconnectCount,
+          },
+        }),
       });
       await refreshMemories();
     } catch (err) {
@@ -769,11 +850,14 @@ async function stopVoice(endSession = true) {
   }
   state.audioContext = null;
   state.sessionId = null;
+  state.connectionLatencyMs = null;
   state.provider = null;
   state.sentTurns.clear();
   state.geminiUserTranscript = '';
   state.geminiAssistantTranscript = '';
   state.stopping = false;
+  if (endSession) state.reconnectAttempts = 0;
+  if (endSession) state.reconnectCount = 0;
   els.startButton.disabled = false;
   els.provider.disabled = false;
   els.userId.disabled = false;
@@ -784,6 +868,14 @@ async function stopVoice(endSession = true) {
     setStatus('Idle');
   }
 }
+
+window.addEventListener('offline', () => {
+  if (state.sessionId) setStatus('Waiting for network', 'connecting');
+});
+
+window.addEventListener('online', () => {
+  if (state.sessionId) scheduleReconnect('network restored');
+});
 
 async function refreshMemories() {
   const data = await api(`/api/memory?userId=${encodeURIComponent(getUserId())}`);
@@ -797,12 +889,35 @@ async function refreshMemories() {
   for (const memory of data.memories) {
     const item = document.createElement('div');
     item.className = 'memoryItem';
+    const expiry = memory.expiresAt ? ` · until ${new Date(memory.expiresAt).toLocaleDateString()}` : '';
+    const reinforced = memory.reinforcementCount > 1 ? ` · noticed ${memory.reinforcementCount}×` : '';
     item.innerHTML = `
-      <div class="memoryMeta">${escapeHtml(memory.category)} | importance ${memory.importance}${memory.isSensitive ? ' | sensitive' : ''}</div>
+      <div class="memoryMeta">${escapeHtml(memory.category)} · ${escapeHtml(memory.lifespan || 'durable')}${expiry}${reinforced}${memory.isSensitive ? ' · sensitive' : ''}</div>
       <div class="memoryText">${escapeHtml(memory.content)}</div>
-      <button type="button" data-id="${memory.id}">Delete</button>
+      <details class="memoryReason"><summary>Why is this here?</summary><p>${escapeHtml(memory.reason || 'Useful for continuity in future conversations.')}</p></details>
+      <div class="memoryActions"><button type="button" data-action="edit">Correct</button> <button type="button" data-action="lifespan">${memory.lifespan === 'temporary' ? 'Keep' : 'Make temporary'}</button> <button type="button" data-action="delete">Forget</button></div>
     `;
-    item.querySelector('button').addEventListener('click', async () => {
+    item.querySelector('[data-action="edit"]').addEventListener('click', async () => {
+      const content = window.prompt('Correct what Mira should remember:', memory.content);
+      if (content === null || !content.trim() || content.trim() === memory.content) return;
+      await api(`/api/memory/${memory.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ userId: getUserId(), content: content.trim() }),
+      });
+      await refreshMemories();
+    });
+    item.querySelector('[data-action="lifespan"]').addEventListener('click', async () => {
+      await api(`/api/memory/${memory.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          userId: getUserId(),
+          lifespan: memory.lifespan === 'temporary' ? 'durable' : 'temporary',
+          expiresInDays: 7,
+        }),
+      });
+      await refreshMemories();
+    });
+    item.querySelector('[data-action="delete"]').addEventListener('click', async () => {
       await api(`/api/memory/${memory.id}`, {
         method: 'DELETE',
         body: JSON.stringify({ userId: getUserId() }),
@@ -839,5 +954,6 @@ els.toggleDebugButton.addEventListener('click', () => {
 });
 
 ensureVisualizerLoop();
+setTimeGreeting();
 loadHealth().catch((err) => logDebug(err.message));
 refreshMemories().catch((err) => logDebug(err.message));

@@ -1,7 +1,18 @@
-const { createOpenAIRealtimeProvider } = require('../src/providers/realtime/openaiRealtimeProvider');
+const { createOpenAIRealtimeProvider, buildOpenAIRealtimeSessionConfig } = require('../src/providers/realtime/openaiRealtimeProvider');
 const { createGeminiLiveProvider } = require('../src/providers/realtime/geminiLiveProvider');
 
 describe('realtime providers', () => {
+  it('configures semantic turn detection for automatic responses and interruptions', () => {
+    delete process.env.OPENAI_VAD_EAGERNESS;
+    const config = buildOpenAIRealtimeSessionConfig({ instructions: 'Be present.' });
+    expect(config.audio.input.turn_detection).toMatchObject({
+      type: 'semantic_vad',
+      eagerness: 'auto',
+      create_response: true,
+      interrupt_response: true,
+    });
+  });
+
   it('creates an OpenAI realtime session through the unified SDP endpoint', async () => {
     process.env.OPENAI_API_KEY = 'sk-test';
     const fetchImpl = vi.fn(async () => ({

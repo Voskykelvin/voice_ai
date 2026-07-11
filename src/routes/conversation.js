@@ -1,5 +1,16 @@
 const { saveConversationTurn, saveUsageEvent } = require('../services/conversationService');
 const { extractAndSaveMemories } = require('../services/memoryService');
+const { getRecentTurns } = require('../services/memoryService');
+const { evaluateConversation } = require('../services/conversationQualityService');
+
+function cleanClientMetrics(metrics = {}) {
+  const safe = {};
+  for (const key of ['connectionLatencyMs', 'reconnectAttempts']) {
+    const value = Number(metrics[key]);
+    if (Number.isFinite(value) && value >= 0) safe[key] = value;
+  }
+  return safe;
+}
 
 function createConversationRouter({ models, memoryExtractor }) {
   const router = require('express').Router();
@@ -63,20 +74,38 @@ function createConversationRouter({ models, memoryExtractor }) {
         where: { id: sessionId, userId },
       });
 
+      const turns = await getRecentTurns(models, userId, sessionId, 100);
+      const quality = evaluateConversation(turns);
+
       if (session) {
         await session.update({
           status: 'ended',
           endedAt: new Date(),
+          metadata: {
+            ...(session.metadata || {}),
+            quality,
+            clientMetrics: cleanClientMetrics(req.body.metrics),
+          },
         });
       }
 
-      const result = await extractAndSaveMemories(models, {
-        userId,
-        sessionId,
-        extractor: memoryExtractor,
-      });
+      let result;
+      try {
+        result = await extractAndSaveMemories(models, {
+          userId,
+          sessionId,
+          extractor: memoryExtractor,
+        });
+      } catch (err) {
+        console.error('Memory extraction failed after session end', {
+          sessionId,
+          name: err.name,
+          message: err.message,
+        });
+        result = { skipped: true, memories: [], reason: 'Memory extraction will need to be retried.' };
+      }
 
-      res.json({ status: 'ok', memoryExtraction: result });
+      res.json({ status: 'ok', memoryExtraction: result, quality });
     } catch (err) {
       next(err);
     }

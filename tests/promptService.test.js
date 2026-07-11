@@ -25,6 +25,12 @@ describe('promptService', () => {
       },
       sessionMode: 'builder',
       recentTurns: [{ role: 'user', content: 'I want this to feel warm.' }],
+      conversationState: {
+        stance: 'reflect',
+        emotionalDirection: 'tender',
+        questionFatigueRisk: 'high',
+        lastUserThread: 'I want this to feel warm.',
+      },
     });
 
     expect(prompt).toContain('You are Mira');
@@ -38,6 +44,8 @@ describe('promptService', () => {
     expect(prompt).toContain('Kelvin, I am here');
     expect(prompt).toContain('not a therapist');
     expect(prompt).toContain('self-harm');
+    expect(prompt).toContain('Question-fatigue risk: high');
+    expect(prompt).toContain('Do not ask a question');
   });
 
   it('uses the user timezone when choosing the time of day', () => {

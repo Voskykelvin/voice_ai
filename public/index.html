@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Mira Voice</title>
+  <meta name="theme-color" content="#17130f">
+  <title>Mira — a space to talk</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body class="is-idle">
@@ -11,122 +12,69 @@
   <main class="shell">
     <section class="console">
       <header class="topbar">
-        <div class="brandLockup">
-          <span class="brandMark" aria-hidden="true">
-            <span></span>
-          </span>
-          <div>
-            <p class="eyebrow">Private Voice Engine</p>
-            <h1>Mira Voice</h1>
-          </div>
-        </div>
+        <a class="brandLockup" href="/" aria-label="Mira home">
+          <span class="brandMark" aria-hidden="true"><span></span></span>
+          <div><p class="eyebrow">Your private space</p><h1>Mira</h1></div>
+        </a>
         <div class="statusGroup">
-          <span id="connectionStatus" class="status idle">Idle</span>
-          <span id="providerStatus" class="status">openai</span>
+          <span id="connectionStatus" class="status idle"><i></i> Ready</span>
+          <span id="providerStatus" class="status provider">openai</span>
         </div>
       </header>
 
-      <section class="voiceStage" aria-label="Voice presence">
-        <img class="portraitImage" src="/assets/mira-portrait-hero.png" alt="">
+      <section class="voiceStage" aria-label="Conversation with Mira">
+        <img class="portraitImage" src="/assets/mira-portrait-hero.png" alt="Mira's warm portrait">
         <div class="portraitVeil" aria-hidden="true"></div>
-
         <div class="stageCopy">
-          <p class="eyebrow">Realtime Companion</p>
-          <h2 id="stageState">Standby</h2>
+          <p id="timeGreeting" class="eyebrow">A moment for you</p>
+          <h2 id="stageState">What’s on your mind?</h2>
+          <p id="stageHint">No agenda. Start wherever you are.</p>
         </div>
 
         <div id="visualizer" class="visualizer" aria-hidden="true">
           <div class="miraOrb">
-            <div class="rotor rotorOne"></div>
-            <div class="rotor rotorTwo"></div>
-            <div class="rotor rotorThree"></div>
-            <div class="orbGlow"></div>
-            <span class="miraName">Mira</span>
+            <div class="rotor rotorOne"></div><div class="rotor rotorTwo"></div><div class="rotor rotorThree"></div>
+            <div class="orbGlow"></div><span class="miraName">M</span>
           </div>
-          <div class="waveform" aria-hidden="true">
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-            <span></span>
-          </div>
+          <div class="waveform"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
         </div>
 
-        <section id="transcript" class="transcript" aria-live="polite"></section>
+        <section id="transcript" class="transcript" aria-live="polite" aria-label="Conversation transcript"></section>
+
+        <div class="conversationAction">
+          <button id="startButton" class="primaryAction" type="button"><span class="micIcon" aria-hidden="true"></span><span>Talk to Mira</span></button>
+          <button id="stopButton" class="quietAction stopAction" type="button" disabled><span class="stopIcon" aria-hidden="true"></span> End moment</button>
+          <p>Tap once, then speak naturally</p>
+        </div>
       </section>
 
-      <section class="controls" aria-label="Voice controls">
-        <label>
-          <span>Name</span>
-          <input id="displayName" type="text" autocomplete="name" placeholder="Kelvin">
-        </label>
-        <label>
-          <span>Location</span>
-          <input id="location" type="text" autocomplete="address-level2" placeholder="Nairobi, Kenya">
-        </label>
-        <label>
-          <span>User</span>
-          <input id="userId" type="text" autocomplete="off">
-        </label>
-        <label>
-          <span>Provider</span>
-          <select id="provider">
-            <option value="openai">OpenAI Realtime</option>
-            <option value="gemini">Gemini Live</option>
-          </select>
-        </label>
-        <label>
-          <span>Mode</span>
-          <select id="sessionMode">
-            <option value="companion">Companion</option>
-            <option value="builder">Builder</option>
-            <option value="quiet">Quiet</option>
-            <option value="direct">Direct</option>
-            <option value="playful">Playful</option>
-          </select>
-        </label>
-        <button id="startButton" class="primaryAction" type="button">Start</button>
-        <button id="stopButton" class="quietAction" type="button" disabled>Stop</button>
-      </section>
-
-      <section class="forgetBar">
-        <input id="forgetText" type="text" placeholder="Memory text to forget">
-        <button id="forgetButton" class="quietAction" type="button">Forget</button>
-      </section>
+      <details class="preferences">
+        <summary><span>Make this space yours</span><small>Name, mood and voice settings</small></summary>
+        <section class="controls" aria-label="Conversation preferences">
+          <label><span>What should Mira call you?</span><input id="displayName" type="text" autocomplete="name" placeholder="Your name"></label>
+          <label><span>Where are you today?</span><input id="location" type="text" autocomplete="address-level2" placeholder="Nairobi, Kenya"></label>
+          <label><span>Conversation mood</span><select id="sessionMode"><option value="companion">Warm & present</option><option value="builder">Think it through</option><option value="quiet">Quiet company</option><option value="direct">Honest & direct</option><option value="playful">Light & playful</option></select></label>
+          <label><span>Voice engine</span><select id="provider"><option value="openai">OpenAI Realtime</option><option value="gemini">Gemini Live</option></select></label>
+          <label class="technicalField"><span>Private user ID</span><input id="userId" type="text" autocomplete="off"></label>
+        </section>
+      </details>
     </section>
 
     <aside class="side">
-      <section>
-        <div class="panelHeader">
-          <h2>Memories</h2>
-          <button id="refreshMemoryButton" type="button">Refresh</button>
-        </div>
+      <section class="presenceCard"><p class="eyebrow">A living memory</p><h2>Picked up where you left off.</h2><p>Mira remembers the things that matter, so every conversation can feel less like starting over.</p><div class="trustLine"><span aria-hidden="true">✦</span> You control what stays</div></section>
+      <details class="memoryCard">
+        <summary><div><p class="eyebrow">Between us</p><h2>Memories</h2></div><span>View</span></summary>
+        <div class="panelHeader"><p>Things Mira remembers</p><button id="refreshMemoryButton" type="button">Refresh</button></div>
         <div id="memoryList" class="memoryList"></div>
-      </section>
-
+        <div class="forgetBar"><input id="forgetText" type="text" placeholder="Ask Mira to forget…"><button id="forgetButton" class="quietAction" type="button">Forget</button></div>
+      </details>
     </aside>
   </main>
 
-  <section id="debugDrawer" class="debugDrawer" aria-label="Debug panel">
-    <button id="toggleDebugButton" class="debugToggle" type="button" aria-expanded="false" aria-controls="debugPanel">
-      Debug
-    </button>
-    <div class="debugDrawerPanel">
-      <div class="panelHeader">
-        <h2>Debug</h2>
-        <button id="clearDebugButton" type="button">Clear</button>
-      </div>
-      <pre id="debugPanel" class="debugPanel"></pre>
-    </div>
+  <section id="debugDrawer" class="debugDrawer" aria-label="Debug panel" hidden>
+    <button id="toggleDebugButton" class="debugToggle" type="button" aria-expanded="false" aria-controls="debugPanel">Diagnostics</button>
+    <div class="debugDrawerPanel"><div class="panelHeader"><h2>Diagnostics</h2><button id="clearDebugButton" type="button">Clear</button></div><pre id="debugPanel" class="debugPanel"></pre></div>
   </section>
-
   <audio id="remoteAudio" autoplay></audio>
   <script src="/app.js"></script>
 </body>

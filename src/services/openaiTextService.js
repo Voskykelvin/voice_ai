@@ -13,7 +13,7 @@ function extractOutputText(responseJson) {
   return chunks.join('');
 }
 
-async function createMemoryExtraction({ transcript, fetchImpl = global.fetch }) {
+async function createMemoryExtraction({ transcript, existingMemories = [], fetchImpl = global.fetch }) {
   if (!process.env.OPENAI_API_KEY) {
     return { skipped: true, memories: [], reason: 'OPENAI_API_KEY is not set.' };
   }
@@ -31,12 +31,16 @@ async function createMemoryExtraction({ transcript, fetchImpl = global.fetch }) 
             content: { type: 'string' },
             category: {
               type: 'string',
-              enum: ['preference', 'fact', 'relationship', 'goal', 'sensitive', 'safety'],
+              enum: ['preference', 'fact', 'relationship', 'goal', 'open_thread', 'sensitive', 'safety'],
             },
             importance: { type: 'integer', minimum: 1, maximum: 5 },
             sensitive: { type: 'boolean' },
+            lifespan: { type: 'string', enum: ['durable', 'temporary'] },
+            expiresInDays: { type: ['integer', 'null'], minimum: 1, maximum: 365 },
+            reason: { type: 'string' },
+            subject: { type: ['string', 'null'] },
           },
-          required: ['content', 'category', 'importance', 'sensitive'],
+          required: ['content', 'category', 'importance', 'sensitive', 'lifespan', 'expiresInDays', 'reason', 'subject'],
         },
       },
     },
@@ -61,13 +65,15 @@ async function createMemoryExtraction({ transcript, fetchImpl = global.fetch }) 
                 'Extract durable facts worth remembering about the user.',
                 'Remember everything useful for personalization, including sensitive context, but do not extract throwaway small talk.',
                 'Do not diagnose or infer crisis status. If crisis language appears, create a safety memory phrased as possible crisis language appeared.',
+                'Use temporary for near-term details such as an upcoming event or short-lived situation; otherwise use durable. Explain briefly why each item is useful.',
+                'Use open_thread for unresolved situations worth gently revisiting. Give evolving facts a stable snake_case subject such as home_city or current_job; otherwise use null.',
               ].join('\n'),
             },
           ],
         },
         {
           role: 'user',
-          content: [{ type: 'input_text', text: transcript }],
+          content: [{ type: 'input_text', text: `Existing memories:\n${existingMemories.map((item) => `- ${item.content}`).join('\n') || '- none'}\n\nNew conversation:\n${transcript}` }],
         },
       ],
       text: {

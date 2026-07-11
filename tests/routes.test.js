@@ -47,6 +47,16 @@ describe('API routes', () => {
     expect(models.store.VoiceSession[0].status).toBe('active');
   });
 
+  it('reports readiness and adds safe request headers', async () => {
+    const app = createApp({ models: createFakeModels(), providers: createMockProviders() });
+    const response = await request(app).get('/api/ready').expect(200);
+    expect(response.body.status).toBe('ready');
+    expect(response.headers['x-request-id']).toBeTruthy();
+    expect(response.headers['cache-control']).toBe('no-store');
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(response.headers['x-powered-by']).toBeUndefined();
+  });
+
   it('adds the preferred display name to realtime instructions', async () => {
     const models = createFakeModels();
     const calls = {};
@@ -103,10 +113,13 @@ describe('API routes', () => {
       })
       .expect(200);
 
-    await request(app)
+    const endResponse = await request(app)
       .post(`/api/conversation/${sessionId}/end`)
-      .send({ userId: 'local-user' })
+      .send({ userId: 'local-user', metrics: { connectionLatencyMs: 420, reconnectAttempts: 1 } })
       .expect(200);
+
+    expect(endResponse.body.quality.turnCount).toBe(2);
+    expect(models.store.VoiceSession[0].metadata.clientMetrics.connectionLatencyMs).toBe(420);
 
     const memories = await request(app)
       .get('/api/memory?userId=local-user')
@@ -144,5 +157,24 @@ describe('API routes', () => {
       .expect(200);
 
     expect(memories.body.memories).toHaveLength(0);
+  });
+
+  it('lets the user correct a saved memory', async () => {
+    const models = createFakeModels();
+    const app = createApp({ models, providers: createMockProviders() });
+    await request(app).post('/api/conversation/events').send({
+      userId: 'local-user',
+      sessionId: '11111111-1111-4111-8111-111111111111',
+      events: [{ role: 'user', content: 'I want to die.' }],
+    });
+    const memoryId = models.store.Memory[0].id;
+
+    const response = await request(app)
+      .patch(`/api/memory/${memoryId}`)
+      .send({ userId: 'local-user', content: 'Possible distress appeared; check in gently.', lifespan: 'temporary', expiresInDays: 2 })
+      .expect(200);
+
+    expect(response.body.memory.content).toContain('check in gently');
+    expect(response.body.memory.lifespan).toBe('temporary');
   });
 });

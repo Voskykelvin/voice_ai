@@ -2,6 +2,7 @@ const {
   listMemories,
   deleteMemory,
   forgetByText,
+  updateMemory,
 } = require('../services/memoryService');
 
 function createMemoryRouter({ models }) {
@@ -34,6 +35,25 @@ function createMemoryRouter({ models }) {
       });
 
       res.json({ deleted });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.patch('/:id', async (req, res, next) => {
+    try {
+      const { userId, content, importance, lifespan, expiresInDays } = req.body;
+      if (!userId) return res.status(400).json({ error: 'userId is required.' });
+      const memory = await updateMemory(models, {
+        userId,
+        memoryId: req.params.id,
+        content,
+        importance,
+        lifespan,
+        expiresInDays,
+      });
+      if (!memory) return res.status(404).json({ error: 'Memory not found.' });
+      res.json({ memory });
     } catch (err) {
       next(err);
     }

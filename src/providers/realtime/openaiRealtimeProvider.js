@@ -21,6 +21,9 @@ function buildOpenAIRealtimeSessionConfig({ instructions }) {
       input: {
         turn_detection: {
           type: 'semantic_vad',
+          eagerness: process.env.OPENAI_VAD_EAGERNESS || 'auto',
+          create_response: true,
+          interrupt_response: true,
         },
         transcription: {
           model: process.env.OPENAI_TRANSCRIPTION_MODEL || 'gpt-4o-mini-transcribe',

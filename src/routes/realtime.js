@@ -9,17 +9,20 @@ const { getRelevantMemories, getRecentTurns } = require('../services/memoryServi
 const { ensureUserProfile } = require('../services/conversationService');
 const { createGeminiLiveSessionToken } = require('../services/geminiLiveService');
 const { cleanLocation, getLocalWeatherContext } = require('../services/localContextService');
+const { inferConversationState } = require('../services/conversationStateService');
 
 async function buildRequestContext({ models, req, userId }) {
-  const savedProfile = await ensureUserProfile(models, userId, {
-    displayName: req.body.displayName,
-    timezone: req.body.timezone,
-  });
   const location = cleanLocation(req.body.location);
+  const [savedProfile, weatherContext] = await Promise.all([
+    ensureUserProfile(models, userId, {
+      displayName: req.body.displayName,
+      timezone: req.body.timezone,
+    }),
+    getLocalWeatherContext({ location }),
+  ]);
   const userProfile = { ...savedProfile, location };
   const now = new Date();
   const timeOfDay = getTimeOfDay(now, userProfile.timezone);
-  const weatherContext = await getLocalWeatherContext({ location });
   const sessionMode = normalizeSessionMode(req.body.sessionMode);
 
   return {
@@ -49,7 +52,12 @@ function createRealtimeRouter({ models, providers }) {
         return res.status(400).json({ error: 'sdpOffer is required.' });
       }
 
-      const { userProfile, timeOfDay, sessionMode, localContext } = await buildRequestContext({ models, req, userId });
+      const [requestContext, memories, recentTurns] = await Promise.all([
+        buildRequestContext({ models, req, userId }),
+        getRelevantMemories(models, userId),
+        getRecentTurns(models, userId),
+      ]);
+      const { userProfile, timeOfDay, sessionMode, localContext } = requestContext;
 
       const provider = providers.get(providerName);
       const session = await models.VoiceSession.create({
@@ -61,14 +69,10 @@ function createRealtimeRouter({ models, providers }) {
         metadata: {},
       });
 
-      const [memories, recentTurns] = await Promise.all([
-        getRelevantMemories(models, userId),
-        getRecentTurns(models, userId, session.id),
-      ]);
-
       const instructions = buildRealtimeInstructions({
         memories,
         recentTurns,
+        conversationState: inferConversationState(recentTurns),
         userProfile,
         localContext,
         sessionMode,
@@ -117,7 +121,12 @@ function createRealtimeRouter({ models, providers }) {
         return res.status(400).json({ error: 'userId is required.' });
       }
 
-      const { userProfile, timeOfDay, sessionMode, localContext } = await buildRequestContext({ models, req, userId });
+      const [requestContext, memories, recentTurns] = await Promise.all([
+        buildRequestContext({ models, req, userId }),
+        getRelevantMemories(models, userId),
+        getRecentTurns(models, userId),
+      ]);
+      const { userProfile, timeOfDay, sessionMode, localContext } = requestContext;
 
       const session = await models.VoiceSession.create({
         userId,
@@ -128,14 +137,10 @@ function createRealtimeRouter({ models, providers }) {
         metadata: {},
       });
 
-      const [memories, recentTurns] = await Promise.all([
-        getRelevantMemories(models, userId),
-        getRecentTurns(models, userId, session.id),
-      ]);
-
       const instructions = buildRealtimeInstructions({
         memories,
         recentTurns,
+        conversationState: inferConversationState(recentTurns),
         userProfile,
         localContext,
         sessionMode,

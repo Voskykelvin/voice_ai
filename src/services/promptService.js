@@ -1,4 +1,5 @@
 const persona = require('../config/persona');
+const { formatConversationState } = require('./conversationStateService');
 
 const SESSION_MODES = {
   companion: {
@@ -151,6 +152,7 @@ function formatSessionMode(mode = 'companion') {
 function buildRealtimeInstructions({
   memories = [],
   recentTurns = [],
+  conversationState = {},
   userProfile = {},
   localContext = {},
   sessionMode = 'companion',
@@ -178,6 +180,10 @@ function buildRealtimeInstructions({
     '# Recent Session Turns',
     formatRecentTurns(recentTurns),
     '',
+    '# Conversation State',
+    'Use this as quiet guidance, not as facts to recite. Follow explicit user requests over inferred state.',
+    formatConversationState(conversationState),
+    '',
     '# Memory Policy',
     'This private MVP remembers durable personal details by default. If the user asks you to forget something, acknowledge it and tell them to use the app memory controls or say the exact thing to forget.',
     '',
@@ -200,5 +206,6 @@ module.exports = {
   formatLocalContext,
   formatSessionMode,
   formatUserProfile,
+  formatConversationState,
   normalizeSessionMode,
 };

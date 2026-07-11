@@ -7,6 +7,7 @@ function clampImportance(value) {
 }
 
 function decryptMemory(memory) {
+  const metadata = memory.metadata || {};
   return {
     id: memory.id,
     userId: memory.userId,
@@ -18,7 +19,16 @@ function decryptMemory(memory) {
     lastReferencedAt: memory.lastReferencedAt,
     createdAt: memory.createdAt,
     updatedAt: memory.updatedAt,
+    lifespan: metadata.lifespan || 'durable',
+    expiresAt: metadata.expiresAt || null,
+    reason: metadata.reason || 'Mira heard this in a conversation and judged it useful for continuity.',
+    reinforcementCount: Number(metadata.reinforcementCount || 1),
   };
+}
+
+function isExpired(memory, now = Date.now()) {
+  const expiresAt = memory.metadata?.expiresAt;
+  return Boolean(expiresAt && new Date(expiresAt).getTime() <= now);
 }
 
 function decryptTurn(turn) {
@@ -45,12 +55,13 @@ async function getRelevantMemories(models, userId, limit = 15) {
     limit,
   });
 
-  return memories.map(decryptMemory);
+  return memories.filter((memory) => !isExpired(memory)).map(decryptMemory);
 }
 
-async function getRecentTurns(models, userId, sessionId, limit = 12) {
+async function getRecentTurns(models, userId, sessionId = null, limit = 12) {
+  const where = sessionId ? { userId, sessionId } : { userId };
   const turns = await models.ConversationTurn.findAll({
-    where: { userId, sessionId },
+    where,
     order: [['createdAt', 'DESC']],
     limit,
   });
@@ -67,7 +78,13 @@ async function listMemories(models, userId) {
     ],
   });
 
-  return memories.map(decryptMemory);
+  return memories.filter((memory) => !isExpired(memory)).map(decryptMemory);
+}
+
+function buildExpiry(lifespan, expiresInDays) {
+  if (lifespan !== 'temporary') return null;
+  const days = Math.max(1, Math.min(365, Number(expiresInDays) || 7));
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
 async function createMemory(models, {
@@ -78,18 +95,82 @@ async function createMemory(models, {
   isSensitive = false,
   sourceSessionId = null,
   metadata = {},
+  lifespan = 'durable',
+  expiresInDays = null,
+  subject = null,
 }) {
-  const encrypted = encryptText(content);
+  const cleanContent = String(content || '').trim();
+  const contentHash = stableContentHash(cleanContent);
+  const duplicate = await models.Memory.findOne?.({ where: { userId, contentHash } });
+  if (duplicate && !isExpired(duplicate)) {
+    const reinforcementCount = Number(duplicate.metadata?.reinforcementCount || 1) + 1;
+    await duplicate.update({
+      importance: Math.max(duplicate.importance || 3, clampImportance(importance)),
+      lastReferencedAt: new Date(),
+      metadata: { ...duplicate.metadata, reinforcementCount, lastReinforcedAt: new Date().toISOString() },
+    });
+    await models.MemoryEvent.create({
+      userId,
+      memoryId: duplicate.id,
+      action: 'reinforced',
+      reason: 'duplicate_extraction',
+      metadata: { reinforcementCount },
+    });
+    return decryptMemory(duplicate);
+  }
+
+  if (subject) {
+    const candidates = await models.Memory.findAll({ where: { userId } });
+    const evolving = candidates.find((item) => !isExpired(item) && item.metadata?.subject === subject);
+    if (evolving) {
+      await evolving.update({
+        ...encryptText(cleanContent),
+        contentHash,
+        category,
+        importance: clampImportance(importance),
+        isSensitive: Boolean(isSensitive || category === 'sensitive' || category === 'safety'),
+        sourceSessionId,
+        lastReferencedAt: new Date(),
+        metadata: {
+          ...(evolving.metadata || {}),
+          ...metadata,
+          subject,
+          lifespan: lifespan === 'temporary' ? 'temporary' : 'durable',
+          expiresAt: buildExpiry(lifespan === 'temporary' ? 'temporary' : 'durable', expiresInDays),
+          updatedFromConversationAt: new Date().toISOString(),
+          reason: metadata.reason || 'Mira updated an earlier memory when your situation changed.',
+        },
+      });
+      await models.MemoryEvent.create({
+        userId,
+        memoryId: evolving.id,
+        action: 'superseded',
+        reason: 'evolving_fact',
+        metadata: { subject },
+      });
+      return decryptMemory(evolving);
+    }
+  }
+
+  const encrypted = encryptText(cleanContent);
+  const normalizedLifespan = lifespan === 'temporary' ? 'temporary' : 'durable';
   const memory = await models.Memory.create({
     userId,
     ...encrypted,
-    contentHash: stableContentHash(content),
+    contentHash,
     category,
     importance: clampImportance(importance),
     isSensitive: Boolean(isSensitive || category === 'sensitive' || category === 'safety'),
     sourceSessionId,
     lastReferencedAt: new Date(),
-    metadata,
+    metadata: {
+      ...metadata,
+      lifespan: normalizedLifespan,
+      expiresAt: buildExpiry(normalizedLifespan, expiresInDays),
+      reinforcementCount: 1,
+      reason: metadata.reason || 'Mira heard this in a conversation and judged it useful for continuity.',
+      subject: subject || null,
+    },
   });
 
   await models.MemoryEvent.create({
@@ -100,6 +181,35 @@ async function createMemory(models, {
     metadata: { category },
   });
 
+  return decryptMemory(memory);
+}
+
+async function updateMemory(models, { userId, memoryId, content, importance, lifespan, expiresInDays }) {
+  const memory = await models.Memory.findOne({ where: { id: memoryId, userId } });
+  if (!memory) return null;
+
+  const changes = {};
+  if (content !== undefined) {
+    const cleanContent = String(content).trim();
+    if (!cleanContent) throw new Error('Memory content cannot be empty.');
+    Object.assign(changes, encryptText(cleanContent), { contentHash: stableContentHash(cleanContent) });
+  }
+  if (importance !== undefined) changes.importance = clampImportance(importance);
+  if (lifespan !== undefined) {
+    const normalized = lifespan === 'temporary' ? 'temporary' : 'durable';
+    changes.metadata = {
+      ...(memory.metadata || {}),
+      lifespan: normalized,
+      expiresAt: buildExpiry(normalized, expiresInDays),
+      correctedAt: new Date().toISOString(),
+      reason: 'You reviewed or corrected this memory.',
+    };
+  } else {
+    changes.metadata = { ...(memory.metadata || {}), correctedAt: new Date().toISOString(), reason: 'You reviewed or corrected this memory.' };
+  }
+
+  await memory.update(changes);
+  await models.MemoryEvent.create({ userId, memoryId, action: 'updated', reason: 'user_correction', metadata: {} });
   return decryptMemory(memory);
 }
 
@@ -151,7 +261,8 @@ async function extractAndSaveMemories(models, {
     .map((turn) => `${turn.role}: ${turn.content}`)
     .join('\n');
 
-  const result = await extractor({ transcript });
+  const existingMemories = await listMemories(models, userId);
+  const result = await extractor({ transcript, existingMemories });
   if (result.skipped) return result;
 
   const saved = [];
@@ -167,7 +278,11 @@ async function extractAndSaveMemories(models, {
       metadata: {
         extractorProvider: process.env.MEMORY_EXTRACT_PROVIDER || (process.env.OPENAI_API_KEY ? 'openai' : 'gemini'),
         extractor: process.env.MEMORY_EXTRACT_MODEL || process.env.GEMINI_MEMORY_MODEL || 'gpt-5.4-nano',
+        reason: item.reason || 'Mira extracted this because it may help personalize future conversations.',
       },
+      lifespan: item.lifespan || 'durable',
+      expiresInDays: item.expiresInDays,
+      subject: item.subject,
     }));
   }
 
@@ -179,6 +294,7 @@ module.exports = {
   getRecentTurns,
   listMemories,
   createMemory,
+  updateMemory,
   deleteMemory,
   forgetByText,
   extractAndSaveMemories,

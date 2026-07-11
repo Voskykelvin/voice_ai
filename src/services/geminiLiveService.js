@@ -15,7 +15,7 @@ function modelResourceName(model) {
   return model.startsWith('models/') ? model : `models/${model}`;
 }
 
-function buildGeminiLiveConfig({ instructions }) {
+function buildGeminiLiveConfig({ instructions, resumeHandle = null }) {
   const config = {
     responseModalities: ['AUDIO'],
     temperature: Number(process.env.GEMINI_LIVE_TEMPERATURE || 0.7),
@@ -27,6 +27,19 @@ function buildGeminiLiveConfig({ instructions }) {
     thinkingConfig: {
       thinkingLevel: process.env.GEMINI_LIVE_THINKING_LEVEL || 'low',
     },
+    realtimeInputConfig: {
+      automaticActivityDetection: {
+        disabled: false,
+        startOfSpeechSensitivity: 'START_SENSITIVITY_HIGH',
+        endOfSpeechSensitivity: 'END_SENSITIVITY_HIGH',
+        prefixPaddingMs: 40,
+        silenceDurationMs: Number(process.env.GEMINI_VAD_SILENCE_MS || 500),
+      },
+      activityHandling: 'START_OF_ACTIVITY_INTERRUPTS',
+      turnCoverage: 'TURN_INCLUDES_ONLY_ACTIVITY',
+    },
+    sessionResumption: resumeHandle ? { handle: resumeHandle } : {},
+    contextWindowCompression: { slidingWindow: {} },
   };
 
   const voiceName = process.env.GEMINI_LIVE_VOICE || 'Kore';
@@ -61,17 +74,20 @@ function buildGeminiLiveSetup({ model, liveConfig }) {
     systemInstruction: liveConfig.systemInstruction,
     inputAudioTranscription: liveConfig.inputAudioTranscription,
     outputAudioTranscription: liveConfig.outputAudioTranscription,
+    realtimeInputConfig: liveConfig.realtimeInputConfig,
+    sessionResumption: liveConfig.sessionResumption,
+    contextWindowCompression: liveConfig.contextWindowCompression,
   };
 }
 
-async function createGeminiLiveSessionToken({ instructions }) {
+async function createGeminiLiveSessionToken({ instructions, resumeHandle = null }) {
   const apiKey = getGeminiApiKey();
   if (!apiKey) {
     throw new ProviderRequestError('GEMINI_API_KEY is required for Gemini Live.', 500);
   }
 
   const model = getGeminiModel();
-  const liveConfig = buildGeminiLiveConfig({ instructions });
+  const liveConfig = buildGeminiLiveConfig({ instructions, resumeHandle });
   const { GoogleGenAI } = await import('@google/genai');
   const client = new GoogleGenAI({
     apiKey,

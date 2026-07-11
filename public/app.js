@@ -26,6 +26,7 @@ const state = {
   reconnectCount: 0,
   sessionStartedAt: 0,
   connectionLatencyMs: null,
+  geminiResumeHandle: null,
 };
 
 const MIC_CONSTRAINTS = {
@@ -611,6 +612,16 @@ async function handleGeminiEvent(event) {
     }
   }
 
+  const resumption = event.sessionResumptionUpdate || event.session_resumption_update;
+  if (resumption?.resumable && (resumption.newHandle || resumption.new_handle)) {
+    state.geminiResumeHandle = resumption.newHandle || resumption.new_handle;
+  }
+
+  if (event.goAway) {
+    logDebug(`Gemini requested a connection handoff with ${event.goAway.timeLeft || 'limited time'} remaining.`);
+    scheduleReconnect('Gemini connection handoff');
+  }
+
   const serverContent = event.serverContent || {};
   const inputText = serverContent.inputTranscription?.text || serverContent.input_transcription?.text;
   const outputText = serverContent.outputTranscription?.text || serverContent.output_transcription?.text;
@@ -673,6 +684,7 @@ async function startGeminiVoice() {
       body: JSON.stringify({
         userId: getUserId(),
         ...getUserProfile(),
+        resumeHandle: state.geminiResumeHandle,
       }),
     });
 
@@ -696,6 +708,7 @@ async function startGeminiVoice() {
     });
 
     state.ws.addEventListener('error', () => {
+      if (state.reconnectTimer) return;
       clearGeminiSetupTimer();
       addTurn('error', 'Gemini Live connection failed.');
       setStatus('Error', 'error');
@@ -704,6 +717,7 @@ async function startGeminiVoice() {
     state.ws.addEventListener('close', (event) => {
       clearGeminiSetupTimer();
       if (state.stopping || !state.sessionId) return;
+      if (state.reconnectTimer) return;
       if (!document.body.classList.contains('is-live')) {
         addTurn('error', formatCloseEvent(event));
         setStatus('Error', 'error');
@@ -858,6 +872,7 @@ async function stopVoice(endSession = true) {
   state.stopping = false;
   if (endSession) state.reconnectAttempts = 0;
   if (endSession) state.reconnectCount = 0;
+  if (endSession) state.geminiResumeHandle = null;
   els.startButton.disabled = false;
   els.provider.disabled = false;
   els.userId.disabled = false;

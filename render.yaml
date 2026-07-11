@@ -34,6 +34,8 @@ services:
         value: 0.7
       - key: GEMINI_LIVE_THINKING_LEVEL
         value: low
+      - key: GEMINI_VAD_SILENCE_MS
+        value: 500
       - key: OPENAI_API_KEY
         sync: false
       - key: GEMINI_API_KEY

@@ -14,6 +14,10 @@ describe('geminiLiveService', () => {
     expect(setup.generationConfig.speechConfig).toEqual(liveConfig.speechConfig);
     expect(setup.generationConfig.thinkingConfig).toEqual(liveConfig.thinkingConfig);
     expect(setup.systemInstruction).toEqual(liveConfig.systemInstruction);
+    expect(setup.realtimeInputConfig.automaticActivityDetection.silenceDurationMs).toBe(500);
+    expect(setup.realtimeInputConfig.activityHandling).toBe('START_OF_ACTIVITY_INTERRUPTS');
+    expect(setup.sessionResumption).toEqual({});
+    expect(setup.contextWindowCompression).toEqual({ slidingWindow: {} });
     expect(setup).not.toHaveProperty('responseModalities');
     expect(setup).not.toHaveProperty('speechConfig');
   });

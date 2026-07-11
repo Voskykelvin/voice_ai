@@ -54,8 +54,8 @@ function createRealtimeRouter({ models, providers }) {
 
       const [requestContext, memories, recentTurns] = await Promise.all([
         buildRequestContext({ models, req, userId }),
-        getRelevantMemories(models, userId),
-        getRecentTurns(models, userId),
+        getRelevantMemories(models, userId, 10),
+        getRecentTurns(models, userId, null, 8),
       ]);
       const { userProfile, timeOfDay, sessionMode, localContext } = requestContext;
 
@@ -123,8 +123,8 @@ function createRealtimeRouter({ models, providers }) {
 
       const [requestContext, memories, recentTurns] = await Promise.all([
         buildRequestContext({ models, req, userId }),
-        getRelevantMemories(models, userId),
-        getRecentTurns(models, userId),
+        getRelevantMemories(models, userId, 10),
+        getRecentTurns(models, userId, null, 8),
       ]);
       const { userProfile, timeOfDay, sessionMode, localContext } = requestContext;
 
@@ -148,7 +148,10 @@ function createRealtimeRouter({ models, providers }) {
         personaConfig: persona,
       });
 
-      const providerSession = await createGeminiLiveSessionToken({ instructions });
+      const resumeHandle = typeof req.body.resumeHandle === 'string' && req.body.resumeHandle.length < 4096
+        ? req.body.resumeHandle
+        : null;
+      const providerSession = await createGeminiLiveSessionToken({ instructions, resumeHandle });
 
       await session.update({
         providerSessionId: null,

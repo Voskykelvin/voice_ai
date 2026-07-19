@@ -11,6 +11,10 @@ describe('realtime providers', () => {
       create_response: true,
       interrupt_response: true,
     });
+    expect(config.tools).toEqual([
+      expect.objectContaining({ type: 'function', name: 'web_research' }),
+    ]);
+    expect(config.tool_choice).toBe('auto');
   });
 
   it('creates an OpenAI realtime session through the unified SDP endpoint', async () => {

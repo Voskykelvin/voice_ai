@@ -299,10 +299,67 @@ function initModels(sequelize) {
     ],
   });
 
+  const KnowledgeAsset = sequelize.define('KnowledgeAsset', {
+    id: {
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true,
+    },
+    userId: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    name: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    kind: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'document',
+    },
+    mimeType: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'text/plain',
+    },
+    encryptedContent: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+    },
+    contentIv: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    contentTag: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    contentHash: {
+      type: DataTypes.STRING,
+      allowNull: false,
+    },
+    metadata: {
+      type: DataTypes.JSON,
+      allowNull: false,
+      defaultValue: {},
+    },
+  }, {
+    tableName: 'knowledge_assets',
+    timestamps: true,
+    paranoid: true,
+    indexes: [
+      { fields: ['userId'] },
+      { fields: ['userId', 'kind'] },
+      { fields: ['contentHash'] },
+    ],
+  });
+
   User.hasMany(VoiceSession, { foreignKey: 'userId' });
   VoiceSession.belongsTo(User, { foreignKey: 'userId' });
   User.hasMany(ConversationTurn, { foreignKey: 'userId' });
   User.hasMany(Memory, { foreignKey: 'userId' });
+  User.hasMany(KnowledgeAsset, { foreignKey: 'userId' });
 
   return {
     sequelize,
@@ -312,6 +369,7 @@ function initModels(sequelize) {
     Memory,
     MemoryEvent,
     UsageEvent,
+    KnowledgeAsset,
   };
 }
 

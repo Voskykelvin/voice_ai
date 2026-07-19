@@ -56,6 +56,7 @@ function createFakeModels() {
     Memory: [],
     MemoryEvent: [],
     UsageEvent: [],
+    KnowledgeAsset: [],
   };
 
   return {
@@ -66,6 +67,7 @@ function createFakeModels() {
     Memory: makeModel('Memory', store),
     MemoryEvent: makeModel('MemoryEvent', store),
     UsageEvent: makeModel('UsageEvent', store),
+    KnowledgeAsset: makeModel('KnowledgeAsset', store),
   };
 }
 

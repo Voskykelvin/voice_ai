@@ -57,6 +57,85 @@ describe('API routes', () => {
     expect(response.headers['x-powered-by']).toBeUndefined();
   });
 
+  it('runs web research through a server-side tool route', async () => {
+    const app = createApp({
+      models: createFakeModels(),
+      providers: createMockProviders(),
+      webResearch: async ({ query }) => ({
+        query,
+        answer: 'Fresh result from the web.',
+        model: 'test-web-model',
+      }),
+    });
+
+    const response = await request(app)
+      .post('/api/tools/web-research')
+      .send({ query: 'latest AI voice research' })
+      .expect(200);
+
+    expect(response.body.answer).toContain('Fresh result');
+    expect(response.body.query).toBe('latest AI voice research');
+  });
+
+  it('uploads private knowledge and injects it into realtime instructions', async () => {
+    const models = createFakeModels();
+    const calls = {};
+    const app = createApp({ models, providers: createMockProviders(calls) });
+
+    const uploadResponse = await request(app)
+      .post('/api/knowledge')
+      .send({
+        userId: 'local-user',
+        name: 'launch-notes.md',
+        kind: 'document',
+        mimeType: 'text/markdown',
+        textContent: 'Mira should know the launch plan includes document upload and web research.',
+      })
+      .expect(201);
+
+    expect(uploadResponse.body.asset.name).toBe('launch-notes.md');
+    expect(uploadResponse.body.asset.content).toContain('launch plan');
+
+    const listResponse = await request(app)
+      .get('/api/knowledge?userId=local-user')
+      .expect(200);
+
+    expect(listResponse.body.assets).toHaveLength(1);
+
+    await request(app)
+      .post('/api/realtime/session')
+      .send({ userId: 'local-user', provider: 'openai', sdpOffer: 'offer-sdp' })
+      .expect(200);
+
+    expect(calls.instructions).toContain('Uploaded Knowledge');
+    expect(calls.instructions).toContain('launch-notes.md');
+    expect(calls.instructions).toContain('document upload and web research');
+    expect(models.store.VoiceSession[0].metadata.knowledgeAssetCount).toBe(1);
+  });
+
+  it('describes photo uploads through the injected image describer', async () => {
+    const models = createFakeModels();
+    const app = createApp({
+      models,
+      providers: createMockProviders(),
+      imageDescriber: async ({ name }) => `Photo description for ${name}: a clean Mira interface sketch.`,
+    });
+
+    const response = await request(app)
+      .post('/api/knowledge')
+      .send({
+        userId: 'local-user',
+        name: 'mira-ui.png',
+        kind: 'photo',
+        mimeType: 'image/png',
+        imageDataUrl: 'data:image/png;base64,abc',
+      })
+      .expect(201);
+
+    expect(response.body.asset.kind).toBe('photo');
+    expect(response.body.asset.content).toContain('clean Mira interface sketch');
+  });
+
   it('adds the preferred display name to realtime instructions', async () => {
     const models = createFakeModels();
     const calls = {};

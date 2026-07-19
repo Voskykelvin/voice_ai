@@ -33,6 +33,25 @@ function buildOpenAIRealtimeSessionConfig({ instructions }) {
         voice: process.env.OPENAI_REALTIME_VOICE || 'marin',
       },
     },
+    tools: [
+      {
+        type: 'function',
+        name: 'web_research',
+        description: 'Search the public web in real time for current research, news, facts, prices, schedules, product information, or anything that may have changed recently.',
+        parameters: {
+          type: 'object',
+          properties: {
+            query: {
+              type: 'string',
+              description: 'A focused web search query that captures the user request.',
+            },
+          },
+          required: ['query'],
+          additionalProperties: false,
+        },
+      },
+    ],
+    tool_choice: 'auto',
   };
 }
 

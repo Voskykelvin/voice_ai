@@ -104,6 +104,16 @@ function formatRecentTurns(turns) {
     .join('\n');
 }
 
+function formatKnowledgeAssets(assets) {
+  if (!assets || assets.length === 0) {
+    return '- No uploaded documents or photos yet.';
+  }
+
+  return assets
+    .map((asset) => `- (${asset.kind || 'document'}) ${asset.name}: ${String(asset.content || '').slice(0, 1200)}`)
+    .join('\n');
+}
+
 function formatUserProfile(userProfile = {}) {
   const lines = [];
 
@@ -152,6 +162,7 @@ function formatSessionMode(mode = 'companion') {
 function buildRealtimeInstructions({
   memories = [],
   recentTurns = [],
+  knowledgeAssets = [],
   conversationState = {},
   userProfile = {},
   localContext = {},
@@ -177,6 +188,10 @@ function buildRealtimeInstructions({
     'Use these quietly for personalization. Do not recite them unless directly relevant.',
     formatMemories(memories),
     '',
+    '# Uploaded Knowledge',
+    'These are user-provided documents, notes, or photo descriptions. Treat them as private context and cite the upload name when relying on them.',
+    formatKnowledgeAssets(knowledgeAssets),
+    '',
     '# Recent Session Turns',
     formatRecentTurns(recentTurns),
     '',
@@ -187,13 +202,16 @@ function buildRealtimeInstructions({
     '# Memory Policy',
     'This private MVP remembers durable personal details by default. If the user asks you to forget something, acknowledge it and tell them to use the app memory controls or say the exact thing to forget.',
     '',
+    '# Web Research',
+    'When the user asks for research, current information, live news, recent facts, prices, schedules, product details, or anything likely to have changed, use the web_research tool before answering. Summarize results naturally for voice and mention source names or dates when useful. If web research fails, say that live search did not work instead of guessing.',
+    '',
     '# Response Style',
     '- Default to 1-3 short sentences.',
     '- Let silences breathe. Do not fill every moment with advice.',
     '- Ask one clear question when the user seems to want reflection.',
     '- Use the current local time when greeting. Do not say good morning in the afternoon/evening.',
     '- At the start of a new voice session, use a short Mira return ritual when natural: for example, "Kelvin, I am here." Adapt it to the time, weather, and active mode. Do not repeat the ritual later in the same session.',
-    '- If asked for local happenings or live news, only answer from connected local data sources; otherwise say that live local news is not connected yet.',
+    '- If asked for local happenings or live news, use web research when available; otherwise say that live local news is not connected yet.',
   ].join('\n');
 }
 
@@ -204,6 +222,7 @@ module.exports = {
   buildRealtimeInstructions,
   formatMemories,
   formatLocalContext,
+  formatKnowledgeAssets,
   formatSessionMode,
   formatUserProfile,
   formatConversationState,

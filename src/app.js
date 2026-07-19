@@ -6,9 +6,11 @@ const crypto = require('crypto');
 const { createRealtimeRouter } = require('./routes/realtime');
 const { createConversationRouter } = require('./routes/conversation');
 const { createMemoryRouter } = require('./routes/memory');
+const { createKnowledgeRouter } = require('./routes/knowledge');
+const { createToolsRouter } = require('./routes/tools');
 const { createProviderRegistry } = require('./providers/realtime');
 
-function createApp({ models, providers, memoryExtractor } = {}) {
+function createApp({ models, providers, memoryExtractor, webResearch, imageDescriber } = {}) {
   const app = express();
   const registry = providers || createProviderRegistry();
 
@@ -22,7 +24,7 @@ function createApp({ models, providers, memoryExtractor } = {}) {
     next();
   });
   app.use(cors({ origin: corsOrigin }));
-  app.use(express.json({ limit: '256kb' }));
+  app.use(express.json({ limit: '6mb' }));
   app.use(express.static(path.join(__dirname, '..', 'public')));
 
   app.get('/api/health', (_req, res) => {
@@ -44,6 +46,8 @@ function createApp({ models, providers, memoryExtractor } = {}) {
   app.use('/api/realtime', createRealtimeRouter({ models, providers: registry }));
   app.use('/api/conversation', createConversationRouter({ models, memoryExtractor }));
   app.use('/api/memory', createMemoryRouter({ models }));
+  app.use('/api/knowledge', createKnowledgeRouter({ models, imageDescriber }));
+  app.use('/api/tools', createToolsRouter({ webResearch }));
 
   app.use((err, req, res, _next) => {
     console.error('Request failed', {

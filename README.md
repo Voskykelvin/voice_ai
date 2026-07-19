@@ -6,6 +6,8 @@ Private browser voice companion with OpenAI Realtime WebRTC, Gemini Live WebSock
 
 - Runnable Express app with static browser UI in `public/`.
 - OpenAI Realtime provider using the WebRTC unified interface.
+- Real-time web research for OpenAI Realtime sessions through a server-side Responses API web search tool.
+- Encrypted knowledge uploads for notes, text documents, and photo descriptions that Mira can use as private session context.
 - Gemini Live provider using ephemeral tokens and browser WebSockets.
 - Sequelize/Postgres schema for users, voice sessions, conversation turns, memories, memory events, and usage events.
 - AES-256-GCM encryption for conversation and memory text.
@@ -25,6 +27,8 @@ npm install
 
 ```bash
 OPENAI_API_KEY=...
+WEB_RESEARCH_MODEL=gpt-5.6
+KNOWLEDGE_IMAGE_MODEL=gpt-5.4-mini
 MEMORY_ENCRYPTION_KEY=use-a-long-random-secret-at-least-32-chars
 DATABASE_URL=postgres://...
 ```
@@ -60,6 +64,8 @@ Render is a good fit for the backend. Create a Web Service from this repository,
 - The app stores transcripts and extracted memories, encrypted in Postgres.
 - It does not store raw audio.
 - OpenAI receives live audio/text during realtime sessions. "Confidential" here means local encrypted storage and careful provider use, not end-to-end secrecy from the AI provider.
+- Web research sends the search query to OpenAI's Responses API with the hosted `web_search` tool. Keep `OPENAI_API_KEY` on the server only.
+- Knowledge uploads are encrypted in Postgres. Text-like files are read in the browser; photos are summarized through the configured OpenAI image-capable model.
 - Gemini Live is intentionally a stub until the OpenAI path is working and measured.
 
 ## Tests

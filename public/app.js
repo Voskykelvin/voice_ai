@@ -11,6 +11,7 @@ const state = {
   sessionId: null,
   provider: null,
   sentTurns: new Set(),
+  handledFunctionCalls: new Set(),
   geminiUserTranscript: '',
   geminiAssistantTranscript: '',
   visualizerContext: null,
@@ -51,6 +52,9 @@ const els = {
   transcript: document.getElementById('transcript'),
   remoteAudio: document.getElementById('remoteAudio'),
   memoryList: document.getElementById('memoryList'),
+  knowledgeFileInput: document.getElementById('knowledgeFileInput'),
+  knowledgeList: document.getElementById('knowledgeList'),
+  refreshKnowledgeButton: document.getElementById('refreshKnowledgeButton'),
   debugPanel: document.getElementById('debugPanel'),
   debugDrawer: document.getElementById('debugDrawer'),
   toggleDebugButton: document.getElementById('toggleDebugButton'),
@@ -61,6 +65,7 @@ const els = {
   stageState: document.getElementById('stageState'),
   stageHint: document.getElementById('stageHint'),
   timeGreeting: document.getElementById('timeGreeting'),
+  preferenceStatus: document.getElementById('preferenceStatus'),
   waveformBars: document.querySelectorAll('.waveform span'),
 };
 
@@ -72,7 +77,27 @@ els.userId.value = normalizeUserId(localStorage.getItem('mira:userId'));
 els.displayName.value = String(localStorage.getItem('mira:displayName') || '').trim();
 els.location.value = String(localStorage.getItem('mira:location') || '').trim();
 els.sessionMode.value = localStorage.getItem('mira:sessionMode') || 'companion';
+els.provider.value = localStorage.getItem('mira:provider') || els.provider.value;
 document.body.dataset.mode = els.sessionMode.value;
+
+let preferenceStatusTimer = null;
+function showPreferencesSaved(message = 'Saved for your next conversation.') {
+  if (!els.preferenceStatus) return;
+  els.preferenceStatus.textContent = message;
+  window.clearTimeout(preferenceStatusTimer);
+  preferenceStatusTimer = window.setTimeout(() => {
+    els.preferenceStatus.textContent = 'Changes save automatically.';
+  }, 2200);
+}
+
+function setSessionControlsDisabled(disabled) {
+  els.startButton.disabled = disabled;
+  els.provider.disabled = disabled;
+  els.userId.disabled = disabled;
+  els.displayName.disabled = disabled;
+  els.location.disabled = disabled;
+  els.sessionMode.disabled = disabled;
+}
 
 function setTimeGreeting() {
   if (!els.timeGreeting) return;
@@ -383,10 +408,11 @@ async function api(path, options = {}) {
 
 async function loadHealth() {
   const data = await api('/api/health');
-  if (data.realtimeProvider && els.provider.querySelector(`option[value="${data.realtimeProvider}"]`)) {
+  const savedProvider = localStorage.getItem('mira:provider');
+  if (!savedProvider && data.realtimeProvider && els.provider.querySelector(`option[value="${data.realtimeProvider}"]`)) {
     els.provider.value = data.realtimeProvider;
-    els.providerStatus.textContent = data.realtimeProvider;
   }
+  els.providerStatus.textContent = els.provider.value;
 }
 
 function getUserId() {
@@ -461,6 +487,57 @@ function extractResponseTexts(event) {
   return texts;
 }
 
+function sendRealtimeEvent(event) {
+  if (!state.dc || state.dc.readyState !== 'open') return false;
+  state.dc.send(JSON.stringify(event));
+  return true;
+}
+
+function getFunctionCalls(event) {
+  return (event.response?.output || []).filter((item) => item.type === 'function_call');
+}
+
+function parseFunctionArguments(value) {
+  if (!value) return {};
+  try {
+    return JSON.parse(value);
+  } catch (_err) {
+    return {};
+  }
+}
+
+async function runRealtimeFunctionCall(functionCall) {
+  if (!functionCall?.call_id || state.handledFunctionCalls.has(functionCall.call_id)) return;
+  state.handledFunctionCalls.add(functionCall.call_id);
+
+  let output;
+  try {
+    if (functionCall.name !== 'web_research') {
+      throw new Error(`Unsupported function: ${functionCall.name}`);
+    }
+
+    const args = parseFunctionArguments(functionCall.arguments);
+    setStatus('Searching the web', 'live');
+    output = await api('/api/tools/web-research', {
+      method: 'POST',
+      body: JSON.stringify({ query: args.query }),
+    });
+  } catch (err) {
+    output = { error: err.message || 'The web research tool failed.' };
+  }
+
+  const sent = sendRealtimeEvent({
+    type: 'conversation.item.create',
+    item: {
+      type: 'function_call_output',
+      call_id: functionCall.call_id,
+      output: JSON.stringify(output),
+    },
+  });
+
+  if (sent) sendRealtimeEvent({ type: 'response.create' });
+}
+
 async function handleRealtimeEvent(event) {
   logDebug(event);
 
@@ -500,6 +577,11 @@ async function handleRealtimeEvent(event) {
   }
 
   if (event.type === 'response.done') {
+    const functionCalls = getFunctionCalls(event);
+    if (functionCalls.length) {
+      await Promise.all(functionCalls.map(runRealtimeFunctionCall));
+    }
+
     for (const text of extractResponseTexts(event)) {
       await saveTurn('assistant', text, event);
     }
@@ -665,12 +747,7 @@ async function handleGeminiEvent(event) {
 async function startGeminiVoice() {
   try {
     setStatus('Connecting');
-    els.startButton.disabled = true;
-    els.provider.disabled = true;
-    els.userId.disabled = true;
-    els.displayName.disabled = true;
-    els.location.disabled = true;
-    els.sessionMode.disabled = true;
+    setSessionControlsDisabled(true);
     els.providerStatus.textContent = 'gemini';
     state.provider = 'gemini';
 
@@ -712,6 +789,7 @@ async function startGeminiVoice() {
       clearGeminiSetupTimer();
       addTurn('error', 'Gemini Live connection failed.');
       setStatus('Error', 'error');
+      stopVoice(false).catch((err) => logDebug(err.message));
     });
 
     state.ws.addEventListener('close', (event) => {
@@ -737,12 +815,7 @@ async function startGeminiVoice() {
 async function startOpenAIVoice() {
   try {
     setStatus('Connecting');
-    els.startButton.disabled = true;
-    els.provider.disabled = true;
-    els.userId.disabled = true;
-    els.displayName.disabled = true;
-    els.location.disabled = true;
-    els.sessionMode.disabled = true;
+    setSessionControlsDisabled(true);
     els.providerStatus.textContent = els.provider.value;
     state.provider = 'openai';
 
@@ -864,6 +937,7 @@ async function stopVoice(endSession = true) {
   }
   state.audioContext = null;
   state.sessionId = null;
+  state.handledFunctionCalls.clear();
   state.connectionLatencyMs = null;
   state.provider = null;
   state.sentTurns.clear();
@@ -873,12 +947,7 @@ async function stopVoice(endSession = true) {
   if (endSession) state.reconnectAttempts = 0;
   if (endSession) state.reconnectCount = 0;
   if (endSession) state.geminiResumeHandle = null;
-  els.startButton.disabled = false;
-  els.provider.disabled = false;
-  els.userId.disabled = false;
-  els.displayName.disabled = false;
-  els.location.disabled = false;
-  els.sessionMode.disabled = false;
+  setSessionControlsDisabled(false);
   if (els.status.textContent !== 'Error') {
     setStatus('Idle');
   }
@@ -955,14 +1024,117 @@ async function forgetText() {
   await refreshMemories();
 }
 
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => resolve(String(reader.result || '')));
+    reader.addEventListener('error', () => reject(reader.error || new Error('Could not read file.')));
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderKnowledgeAssets(assets) {
+  if (!els.knowledgeList) return;
+  els.knowledgeList.innerHTML = '';
+
+  if (!assets.length) {
+    els.knowledgeList.innerHTML = '<div class="knowledgeItem"><div class="knowledgeText">No uploads yet.</div></div>';
+    return;
+  }
+
+  for (const asset of assets) {
+    const item = document.createElement('div');
+    item.className = 'knowledgeItem';
+    const preview = String(asset.content || '');
+    item.innerHTML = `
+      <div class="knowledgeMeta">${escapeHtml(asset.kind)} · ${escapeHtml(asset.mimeType || 'text')}</div>
+      <div class="knowledgeTitle">${escapeHtml(asset.name)}</div>
+      <div class="knowledgeText">${escapeHtml(preview.slice(0, 220))}${preview.length > 220 ? '…' : ''}</div>
+      <button type="button" data-action="delete">Remove</button>
+    `;
+    item.querySelector('[data-action="delete"]').addEventListener('click', async () => {
+      await api(`/api/knowledge/${asset.id}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ userId: getUserId() }),
+      });
+      await refreshKnowledge();
+    });
+    els.knowledgeList.appendChild(item);
+  }
+}
+
+async function refreshKnowledge() {
+  if (!els.knowledgeList) return;
+  const data = await api(`/api/knowledge?userId=${encodeURIComponent(getUserId())}`);
+  renderKnowledgeAssets(data.assets || []);
+}
+
+async function uploadKnowledgeFiles(event) {
+  const files = Array.from(event.target.files || []);
+  if (!files.length) return;
+
+  setStatus('Reading uploads', 'connecting');
+  try {
+    for (const file of files) {
+      const isImage = file.type.startsWith('image/');
+      const payload = {
+        userId: getUserId(),
+        name: file.name,
+        kind: isImage ? 'photo' : 'document',
+        mimeType: file.type || 'text/plain',
+      };
+
+      if (isImage) {
+        payload.imageDataUrl = await fileToDataUrl(file);
+      } else {
+        payload.textContent = await file.text();
+      }
+
+      await api('/api/knowledge', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+    }
+
+    showPreferencesSaved(`${files.length} upload${files.length === 1 ? '' : 's'} added to Mira.`);
+    await refreshKnowledge();
+    setStatus('Idle');
+  } catch (err) {
+    addTurn('error', err.message);
+    setStatus('Error', 'error');
+  } finally {
+    event.target.value = '';
+  }
+}
+
 els.startButton.addEventListener('click', startVoice);
 els.stopButton.addEventListener('click', () => stopVoice(true));
 els.refreshMemoryButton.addEventListener('click', refreshMemories);
 els.forgetButton.addEventListener('click', forgetText);
+if (els.knowledgeFileInput) els.knowledgeFileInput.addEventListener('change', uploadKnowledgeFiles);
+if (els.refreshKnowledgeButton) els.refreshKnowledgeButton.addEventListener('click', refreshKnowledge);
 els.clearDebugButton.addEventListener('click', () => {
   els.debugPanel.textContent = '';
 });
 els.sessionMode.addEventListener('change', getSessionMode);
+els.sessionMode.addEventListener('change', () => showPreferencesSaved('Conversation mood saved.'));
+els.provider.addEventListener('change', () => {
+  localStorage.setItem('mira:provider', els.provider.value);
+  els.providerStatus.textContent = els.provider.value;
+  showPreferencesSaved('Voice engine saved.');
+});
+els.displayName.addEventListener('input', () => {
+  const value = els.displayName.value.trim();
+  if (value) localStorage.setItem('mira:displayName', value);
+  else localStorage.removeItem('mira:displayName');
+  showPreferencesSaved();
+});
+els.location.addEventListener('input', () => {
+  const value = els.location.value.trim();
+  if (value) localStorage.setItem('mira:location', value);
+  else localStorage.removeItem('mira:location');
+  showPreferencesSaved();
+});
 els.toggleDebugButton.addEventListener('click', () => {
   const isOpen = els.debugDrawer.classList.toggle('is-open');
   els.toggleDebugButton.setAttribute('aria-expanded', String(isOpen));
@@ -972,3 +1144,4 @@ ensureVisualizerLoop();
 setTimeGreeting();
 loadHealth().catch((err) => logDebug(err.message));
 refreshMemories().catch((err) => logDebug(err.message));
+refreshKnowledge().catch((err) => logDebug(err.message));

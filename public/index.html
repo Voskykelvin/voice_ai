@@ -56,12 +56,28 @@
           <label><span>Conversation mood</span><select id="sessionMode"><option value="companion">Warm & present</option><option value="builder">Think it through</option><option value="quiet">Quiet company</option><option value="direct">Honest & direct</option><option value="playful">Light & playful</option></select></label>
           <label><span>Voice engine</span><select id="provider"><option value="openai">OpenAI Realtime</option><option value="gemini">Gemini Live</option></select></label>
           <label class="technicalField"><span>Private user ID</span><input id="userId" type="text" autocomplete="off"></label>
+          <p id="preferenceStatus" aria-live="polite" style="grid-column:1/-1;margin:0;color:#8f857a;font-size:12px">Changes save automatically.</p>
         </section>
       </details>
     </section>
 
     <aside class="side">
       <section class="presenceCard"><p class="eyebrow">A living memory</p><h2>Picked up where you left off.</h2><p>Mira remembers the things that matter, so every conversation can feel less like starting over.</p><div class="trustLine"><span aria-hidden="true">✦</span> You control what stays</div></section>
+      <section class="knowledgeCard">
+        <div class="cardHeading">
+          <span class="iconBubble" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 12h4"/><path d="M10 16h4"/><path d="M8 12h.01"/><path d="M8 16h.01"/></svg></span>
+          <div><p class="eyebrow">Knowledge drop</p><h2>Docs & photos</h2></div>
+        </div>
+        <p class="cardText">Add notes, text files, or photos so Mira can reference them in future sessions.</p>
+        <label class="uploadDrop">
+          <input id="knowledgeFileInput" type="file" accept=".txt,.md,.csv,.json,.log,image/*" multiple>
+          <span class="iconBubble large" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 13V3"/><path d="m7 8 5-5 5 5"/><path d="M5 13v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5"/></svg></span>
+          <strong>Upload context</strong>
+          <small>Text files are read directly. Photos get a private AI description.</small>
+        </label>
+        <div class="panelHeader compact"><p>Uploaded knowledge</p><button id="refreshKnowledgeButton" type="button">Refresh</button></div>
+        <div id="knowledgeList" class="knowledgeList"></div>
+      </section>
       <details class="memoryCard">
         <summary><div><p class="eyebrow">Between us</p><h2>Memories</h2></div><span>View</span></summary>
         <div class="panelHeader"><p>Things Mira remembers</p><button id="refreshMemoryButton" type="button">Refresh</button></div>

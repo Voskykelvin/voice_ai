@@ -6,6 +6,7 @@ const {
   normalizeSessionMode,
 } = require('../services/promptService');
 const { getRelevantMemories, getRecentTurns } = require('../services/memoryService');
+const { getRelevantKnowledgeAssets } = require('../services/knowledgeService');
 const { ensureUserProfile } = require('../services/conversationService');
 const { createGeminiLiveSessionToken } = require('../services/geminiLiveService');
 const { cleanLocation, getLocalWeatherContext } = require('../services/localContextService');
@@ -52,10 +53,11 @@ function createRealtimeRouter({ models, providers }) {
         return res.status(400).json({ error: 'sdpOffer is required.' });
       }
 
-      const [requestContext, memories, recentTurns] = await Promise.all([
+      const [requestContext, memories, recentTurns, knowledgeAssets] = await Promise.all([
         buildRequestContext({ models, req, userId }),
         getRelevantMemories(models, userId, 10),
         getRecentTurns(models, userId, null, 8),
+        getRelevantKnowledgeAssets(models, userId, 6),
       ]);
       const { userProfile, timeOfDay, sessionMode, localContext } = requestContext;
 
@@ -72,6 +74,7 @@ function createRealtimeRouter({ models, providers }) {
       const instructions = buildRealtimeInstructions({
         memories,
         recentTurns,
+        knowledgeAssets,
         conversationState: inferConversationState(recentTurns),
         userProfile,
         localContext,
@@ -97,6 +100,7 @@ function createRealtimeRouter({ models, providers }) {
           timeOfDay,
           sessionMode,
           memoryCount: memories.length,
+          knowledgeAssetCount: knowledgeAssets.length,
           localContext,
         },
       });
@@ -121,10 +125,11 @@ function createRealtimeRouter({ models, providers }) {
         return res.status(400).json({ error: 'userId is required.' });
       }
 
-      const [requestContext, memories, recentTurns] = await Promise.all([
+      const [requestContext, memories, recentTurns, knowledgeAssets] = await Promise.all([
         buildRequestContext({ models, req, userId }),
         getRelevantMemories(models, userId, 10),
         getRecentTurns(models, userId, null, 8),
+        getRelevantKnowledgeAssets(models, userId, 6),
       ]);
       const { userProfile, timeOfDay, sessionMode, localContext } = requestContext;
 
@@ -140,6 +145,7 @@ function createRealtimeRouter({ models, providers }) {
       const instructions = buildRealtimeInstructions({
         memories,
         recentTurns,
+        knowledgeAssets,
         conversationState: inferConversationState(recentTurns),
         userProfile,
         localContext,
@@ -162,6 +168,7 @@ function createRealtimeRouter({ models, providers }) {
           timeOfDay,
           sessionMode,
           memoryCount: memories.length,
+          knowledgeAssetCount: knowledgeAssets.length,
           tokenMode: 'ephemeral',
           localContext,
         },
